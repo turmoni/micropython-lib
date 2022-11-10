@@ -16,6 +16,7 @@ Currently these radio modem chipsets are supported:
 * SX1277
 * SX1278
 * SX1279
+* STM32WL55 "sub-GHz radio" peripheral
 
 Most radio configuration features are supported, as well as transmitting or
 receiving packets.
@@ -36,6 +37,7 @@ Second, install at least one modem chipset driver for the modem you have:
 
 - `lora-sx126x` for SX1261 & SX1262 support.
 - `lora-sx127x` for SX1276-SX1279 support.
+- `lora-stm32wl5` for STM32WL55 support.
 
 It's recommended to install only the packages that you need, to save firmware
 size.
@@ -113,6 +115,24 @@ example: lower max frequency, lower maximum SF value) is responsibility of the
 calling code. When possible please use the correct class anyhow, as per-part
 code may be added in the future.
 
+### Creating STM32WL55
+
+```
+from lora import WL55SubGhzModem
+
+def get_modem():
+    # The LoRa configuration will depend on your board and location, see
+    # below under "Modem Configuration" for some possible examples.
+    lora_cfg = { 'freq_khz': SEE_BELOW_FOR_CORRECT_VALUE }
+    return WL55SubGhzModem(lora_cfg)
+
+modem = get_modem()
+```
+
+Note: As this is an internal peripheral of the STM32WL55 microcontroller,
+support also depends on MicroPython being built for a board based on this
+microcontroller.
+
 ### Notes about initialisation
 
 * See below for details about the `lora_cfg` structure that configures the modem's
@@ -156,6 +176,16 @@ Here is a full list of parameters that can be passed to both constructors:
 | `reset` | No       | If set to a `machine.Pin` output attached the modem's NRESET pin , it will be used to hard reset the modem before initializing it. If unset, the programmer is responsible for ensuring the modem should be is in an idle state when the object is instantiated. |   |
 | `lora_cfg`    | No       | If set to an initial LoRa configuration then the modem is set up with this configuration. If not set here, can be set by calling `configure()` later on.                                                                                                         |   |
 | `ant`_sw      | No       | Optional antenna switch object instance, see below for description.                                                                                                                                                                                              |   |
+
+#### STM32WL55
+
+| Parameter         | Required | Description                                                                                                                                                                    |
+|-------------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `lora_cfg`        | No       | If set to an initial LoRa configuration then the modem is set up with this configuration. If not set here, can be set by calling `configure()` later on.                       |
+| `external_hse32`  | No       | Defaults to True. Set to indicate whether the microcontroller has an external HSE32 oscillator connected to OSC_IN/OSC_OUT pins. If one is not attached, must be set to False. |
+| `tcxo_millivolts` | No       | Defaults to 1600. The voltage supplied on pin PB0_VDDTCXO. See `dio3_tcxo_millivolts` above for details, this parameter has the same behaviour.                                |
+| ant_sw            | No       | Defaults to an instance of `lora.NucleoWL55RFConfig` class for the NUCLEO-WL55 development board. Set to `None` to disable any automatic antenna switching. See below for description.                               |
+
 
 ## Modem Configuration
 
@@ -383,10 +413,11 @@ Type: `str`, not case sensitive
 
 Default: RFO_HF or RFO_LF (low power)
 
-SX127x modems have multiple antenna pins for different power levels and
-frequency ranges. The board/module that the LoRa modem chip is on may have
-particular antenna connections, or even an RF switch that needs to be set via a
-GPIO to connect an antenna pin to a particular output (see `ant_sw`, below).
+SX127x modems and STM32WL55 microcontrollers have multiple antenna pins for
+different power levels and frequency ranges. The board/module that the LoRa
+modem chip is on may have particular antenna connections, or even an RF switch
+that needs to be set via a GPIO to connect an antenna pin to a particular output
+(see `ant_sw`, below).
 
 The driver must configure the modem to use the correct pin for a particular
 hardware antenna connection before transmitting. When receiving, the modem
@@ -396,7 +427,7 @@ A common symptom of incorrect `tx_ant` setting is an extremely weak RF signal.
 
 Consult modem datasheet for more details.
 
-SX127x values:
+##### SX127x values:
 
 | Value           | RF Transmit Pin                  |
 |-----------------|----------------------------------|
@@ -407,6 +438,14 @@ Pin "RFO_HF" is automatically used for frequencies above 862MHz, and is not
 supported on SX1278. "RFO_LF" is used for frequencies below 862MHz. Consult
 datasheet Table 32 "Frequency Bands" for more details.
 
+###### WL55SubGhzModem values:
+
+| Value           | RF Transmit Pin         |
+|-----------------|-------------------------|
+| `"PA_BOOST"`    | RFO_HP pin (high power) |
+| Any other value | RFO_LP pin (low power)  |
+
+
 **Important**: If changing `tx_ant` value, configure `output_power` at the same
 time or again before transmitting.
 
@@ -415,15 +454,17 @@ Type: `int`
 
 Default: Depends on modem
 
-Nominal TX output power in dBm. The possible range depends on the modem and (for
-SX127x only) the `tx_ant` configuration.
+Nominal TX output power in dBm. The possible range depends on the modem and for
+some modems the `tx_ant` configuration.
 
-| Modem  | `tx_ant` value   | Range             | "Optimal"              |
-|--------|------------------|-------------------|------------------------|
-| SX1261 | N/A              | -17 to +15        | +10, +14 or +15 [*][^] |
-| SX1262 | N/A              | -9 to +22         | +14, +17, +20, +22 [*] |
-| SX127x | "PA_BOOST"       | +2 to +17, or +20 | Any                    |
-| SX127x | RFO_HF or RFO_LF | -4 to +15         | Any                    |
+| Modem           | `tx_ant` value             | Range (dBm)       | "Optimal" (dBm)        |   |
+|-----------------|----------------------------|-------------------|------------------------|---|
+| SX1261          | N/A                        | -17 to +15        | +10, +14 or +15 [*][^] |   |
+| SX1262          | N/A                        | -9 to +22         | +14, +17, +20, +22 [*] |   |
+| SX127x          | "PA_BOOST"                 | +2 to +17, or +20 | Any                    |   |
+| SX127x          | RFO_HF or RFO_LF           | -4 to +15         | Any                    |   |
+| WL55SubGhzModem | "PA_BOOST"                 | -9 to +22         | +14, +17, +20, +22 [*] |   |
+| WL55SubGhzModem | Any other value (not None) | -17 to +14        | +10, +14 or +15 [*][^] |   |
 
 Values which are out of range for the modem will be clamped at the
 minimum/maximum values shown above.
@@ -432,14 +473,14 @@ Actual radiated TX power for RF regulatory purposes depends on the RF hardware,
 antenna, and the rest of the modem configuration. It should be measured and
 tuned empirically not determined from this configuration information alone.
 
-[*] For SX1261 and SX1262 the datasheet shows "Optimal" Power Amplifier
+[*] For some modems the datasheet shows "Optimal" Power Amplifier
 configuration values for these output power levels. If setting one of these
 levels, the optimal settings from the datasheet are applied automatically by the
 driver. Therefore it is recommended to use one of these power levels if
 possible.
 
-[^] For SX1261 +15dBm is only possible with frequency above 400MHz, will be +14dBm
-otherwise.
+[^] In the marked configurations +15dBm is only possible with frequency above
+400MHz, will be +14dBm otherwise.
 
 #### `implicit_header` - Implicit/Explicit Header Mode
 Type: `bool`
@@ -1106,7 +1147,7 @@ hardware at all so it can be safely called concurrently with other modem APIs.
 
 ## Antenna switch object
 
-The modem constructors have an optional `ant_sw` parameter which allows passing in an antenna switch object to be called by the driver. This allows automatically configuring some GPIOs or other hardware settings each time the modem changes between TX and RX modes, and goes idle.
+Modem constructors all have an optional `ant_sw` parameter which allows passing in an antenna switch object to be called by the driver. This allows automatically configuring some GPIOs or other hardware settings each time the modem changes between TX and RX modes, and goes idle.
 
 The argument should be an object which implements three functions: `tx(tx_arg)`, `rx()`, and `idle()`. For example:
 
@@ -1132,5 +1173,12 @@ The meaning of `tx_arg` depends on the modem:
 * For SX127x it is `True` if the `PA_BOOST` `tx_ant` setting is in use (see above), and `False` otherwise.
 * For SX1262 it is `True` (indicating High Power mode).
 * For SX1261 it is `False` (indicating Low Power mode).
+* For WL55SubGhzModem it is `True` if the `PA_BOOST` `tx_ant` setting is in use (see above), and `False` otherwise.
 
 This parameter can be ignored if it's already known what modem and antenna is being used.
+
+### WL55SubGhzModem ant_sw
+
+When instantiating the `WL55SubGhzModem` and `AsyncWL55SubGHzModem` classes, the default `ant_sw` parameter is not `None`. Instead, the default will instantiate an object of type `lora.NucleoWL55RFConfig`. This implements the antenna switch connections for the ST NUCLEO-WL55 development board (as connected to GPIO pins C4, C5 and C3). See ST document [UM2592](https://www.st.com/resource/en/user_manual/dm00622917-stm32wl-nucleo64-board-mb1389-stmicroelectronics.pdf#page=27) (PDF) Figure 18 for details.
+
+When using these modem classes (only), to disable any automatic antenna switching behaviour it's necessary to explicitly set `ant_sw=None`.
