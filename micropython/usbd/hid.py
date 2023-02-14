@@ -1,10 +1,12 @@
 # MicroPython USB hid module
 # MIT license; Copyright (c) 2022 Angus Gratton
-from device import (
+from .device import (
     USBInterface,
-    EP_OUT_FLAG,
+)
+from .utils import (
     endpoint_descriptor,
     split_bmRequestType,
+    EP_OUT_FLAG,
     STAGE_SETUP,
     REQ_TYPE_STANDARD,
     REQ_TYPE_CLASS,
@@ -35,7 +37,7 @@ _REQ_CONTROL_SET_PROTOCOL = const(0x0B)
 
 
 class HIDInterface(USBInterface):
-    """Abstract base class to implement a USB device HID interface in Python."""
+    # Abstract base class to implement a USB device HID interface in Python.
 
     def __init__(
         self,
@@ -44,20 +46,20 @@ class HIDInterface(USBInterface):
         protocol=_INTERFACE_PROTOCOL_NONE,
         interface_str=None,
     ):
-        """Construct a new HID interface.
-
-        - report_descriptor is the only mandatory argument, which is the binary
-        data consisting of the HID Report Descriptor. See Device Class
-        Definition for Human Interface Devices (HID) v1.11 section 6.2.2 Report
-        Descriptor, p23.
-
-        - extra_descriptors is an optional argument holding additional HID descriptors, to append after the mandatory report descriptor. Most HID devices do not use these.
-
-        - protocol can be set to a specific value as per HID v1.11 section 4.3 Protocols, p9.
-
-        - interface_str is an optional string descriptor to associate with the HID USB interface.
-
-        """
+        # Construct a new HID interface.
+        #
+        # - report_descriptor is the only mandatory argument, which is the binary
+        # data consisting of the HID Report Descriptor. See Device Class
+        # Definition for Human Interface Devices (HID) v1.11 section 6.2.2 Report
+        # Descriptor, p23.
+        #
+        # - extra_descriptors is an optional argument holding additional HID
+        #   descriptors, to append after the mandatory report descriptor. Most
+        #   HID devices do not use these.
+        #
+        # - protocol can be set to a specific value as per HID v1.11 section 4.3 Protocols, p9.
+        #
+        # - interface_str is an optional string descriptor to associate with the HID USB interface.
         super().__init__(_INTERFACE_CLASS, _INTERFACE_SUBCLASS_NONE, protocol, interface_str)
         self.extra_descriptors = extra_descriptors
         self.report_descriptor = report_descriptor
@@ -67,16 +69,16 @@ class HIDInterface(USBInterface):
         return False
 
     def send_report(self, report_data):
-        """Helper function to send a HID report in the typical USB interrupt endpoint associated with a HID interface."""
-        return self.submit_xfer(self._int_ep, report_data)
+        # Helper function to send a HID report in the typical USB interrupt
+        # endpoint associated with a HID interface.  return
+        self.submit_xfer(self._int_ep, report_data)
 
     def get_endpoint_descriptors(self, ep_addr, str_idx):
-        """Return the typical single USB interrupt endpoint descriptor associated with a HID interface.
-
-        As per HID v1.11 section 7.1 Standard Requests, return the contents of
-        the standard HID descriptor before the associated endpoint descriptor.
-
-        """
+        # Return the typical single USB interrupt endpoint descriptor associated
+        # with a HID interface.
+        #
+        # As per HID v1.11 section 7.1 Standard Requests, return the contents of
+        # the standard HID descriptor before the associated endpoint descriptor.
         desc = self.get_hid_descriptor()
         ep_addr |= EP_OUT_FLAG
         desc += endpoint_descriptor(ep_addr, "interrupt", 8, 8)
@@ -86,11 +88,10 @@ class HIDInterface(USBInterface):
         return (desc, [], [ep_addr])
 
     def get_hid_descriptor(self):
-        """Generate a full USB HID descriptor from the object's report descriptor and optional
-        additional descriptors.
-
-        See HID Specification Version 1.1, Section 6.2.1 HID Descriptor p22
-        """
+        # Generate a full USB HID descriptor from the object's report descriptor
+        # and optional additional descriptors.
+        #
+        # See HID Specification Version 1.1, Section 6.2.1 HID Descriptor p22
         result = ustruct.pack(
             "<BBHBBBH",
             9 + 3 * len(self.extra_descriptors),  # bLength
@@ -103,7 +104,8 @@ class HIDInterface(USBInterface):
         )
         # Fill in any additional descriptor type/length pairs
         #
-        # TODO: unclear if this functionality is ever used, may be easier to not support in base class
+        # TODO: unclear if this functionality is ever used, may be easier to not
+        # support in base class
         if self.extra_descriptors:
             result += b"".join(
                 ustruct.pack("<BH", dt, len(dd)) for (dt, dd) in self.extra_descriptors
@@ -112,7 +114,7 @@ class HIDInterface(USBInterface):
         return result
 
     def handle_interface_control_xfer(self, stage, request):
-        """Handle standard and class-specific interface control transfers for HID devices."""
+        # Handle standard and class-specific interface control transfers for HID devices.
         bmRequestType, bRequest, wValue, _, _ = request
 
         recipient, req_type, _ = split_bmRequestType(bmRequestType)
@@ -204,7 +206,8 @@ _MOUSE_REPORT_DESC = bytes(
 
 
 class MouseInterface(HIDInterface):
-    """Very basic synchronous USB mouse HID interface"""
+    # Very basic synchronous USB mouse HID interface
+    # TODO: This should be in a different package or an example
 
     def __init__(self):
         super().__init__(
