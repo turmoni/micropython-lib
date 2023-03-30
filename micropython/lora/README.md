@@ -50,21 +50,24 @@ management"](https://docs.micropython.org/en/latest/reference/packages.html).
 from machine import SPI, Pin
 import lora import SX1262  # or SX1261, depending on which you have
 
-# The LoRa configuration will depend on your board and location, see
-# below under "Modem Configuration" for some possible examples.
-lora_cfg = { 'freq_khz': SEE_BELOW_FOR_CORRECT_VALUE }
+def get_modem():
+    # The LoRa configuration will depend on your board and location, see
+    # below under "Modem Configuration" for some possible examples.
+    lora_cfg = { 'freq_khz': SEE_BELOW_FOR_CORRECT_VALUE }
 
-# To instantiate SPI correctly, see
-# https://docs.micropython.org/en/latest/library/machine.SPI.html
-spi = SPI(0, baudrate=2000_000)
-cs = Pin(9, mode=Pin.OUT, value=1)
+    # To instantiate SPI correctly, see
+    # https://docs.micropython.org/en/latest/library/machine.SPI.html
+    spi = SPI(0, baudrate=2000_000)
+    cs = Pin(9, mode=Pin.OUT, value=1)
 
-# or SX1261(), depending on which you have
-modem = SX1262(spi, cs,
-             busy=Pin(2, mode=Pin.IN),  # Required
-             dio1=Pin(20, mode=Pin.IN),   # Optional, recommended
-             reset=Pin(15, mode=Pin.OUT),  # Optional, recommended
-             lora_cfg=lora_cfg)
+    # or SX1261(), depending on which you have
+    return SX1262(spi, cs,
+                 busy=Pin(2, mode=Pin.IN),  # Required
+                 dio1=Pin(20, mode=Pin.IN),   # Optional, recommended
+                 reset=Pin(15, mode=Pin.OUT),  # Optional, recommended
+                 lora_cfg=lora_cfg)
+
+modem = get_modem()
 ```
 
 ### Creating SX127x
@@ -74,21 +77,24 @@ from machine import SPI, Pin
 # or SX1277, SX1278, SX1279, depending on which you have
 from lora import SX1276
 
-# The LoRa configuration will depend on your board and location, see
-# below under "Modem Configuration" for some possible examples.
-lora_cfg = { 'freq_khz': SEE_BELOW_FOR_CORRECT_VALUE }
+def get_modem():
+    # The LoRa configuration will depend on your board and location, see
+    # below under "Modem Configuration" for some possible examples.
+    lora_cfg = { 'freq_khz': SEE_BELOW_FOR_CORRECT_VALUE }
 
-# To instantiate SPI correctly, see
-# https://docs.micropython.org/en/latest/library/machine.SPI.html
-spi = SPI(0, baudrate=2000_000)
-cs = Pin(9, mode=Pin.OUT, value=1)
+    # To instantiate SPI correctly, see
+    # https://docs.micropython.org/en/latest/library/machine.SPI.html
+    spi = SPI(0, baudrate=2000_000)
+    cs = Pin(9, mode=Pin.OUT, value=1)
 
-# or SX1277, SX1278, SX1279, depending on which you have
-modem = SX1276(spi, cs,
-               dio0=Pin(10, mode=Pin.IN),  # Optional, recommended
-               dio1=Pin(11, mode=Pin.IN),  # Optional, recommended
-               reset=Pin(13, mode=Pin.OPEN_DRAIN),  # Optional, recommended
-               lora_cfg=lora_cfg)
+    # or SX1277, SX1278, SX1279, depending on which you have
+    return SX1276(spi, cs,
+                  dio0=Pin(10, mode=Pin.IN),  # Optional, recommended
+                  dio1=Pin(11, mode=Pin.IN),  # Optional, recommended
+                  reset=Pin(13, mode=Pin.OPEN_DRAIN),  # Optional, recommended
+                  lora_cfg=lora_cfg)
+
+modem = get_modem()
 ```
 
 *Note*: Because SX1276, SX1277, SX1278 and SX1279 are very similar, currently
