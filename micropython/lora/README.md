@@ -25,14 +25,20 @@ interface.
 
 ## Installation
 
-It's recommended to install only the driver package for the modem you are using:
+First, install at least one of the base LoRa packages:
+
+- `lora-sync` to use the synchronous LoRa modem API.
+- `lora-async` to use the asynchronous LoRa modem API with
+  [uasyncio](https://docs.micropython.org/en/latest/library/uasyncio.html). Support
+  for `uasyncio` must be included in your MicroPython build to use `lora-async`.
+
+Second, install at least one modem chipset driver for the modem you have:
 
 - `lora-sx126x` for SX1261 & SX1262 support.
 - `lora-sx127x` for SX1276-SX1279 support.
 
-Optionally also install `lora-async` to enable the async modem API. This
-requires a MicroPython build with support for
-[uasyncio](https://docs.micropython.org/en/latest/library/uasyncio.html).
+It's recommended to install only the packages that you need, to save firmware
+size.
 
 Installing any of these packages will automatically install the common base
 package, `lora`. However the `lora` package by itself does not contain any
@@ -45,6 +51,8 @@ management"](https://docs.micropython.org/en/latest/reference/packages.html).
 ## Initializing Driver
 
 ### Creating SX1262 or SX1261
+
+This is the synchronous modem class, and requires `lora-sync` to be installed:
 
 ```py
 from machine import SPI, Pin
@@ -71,6 +79,8 @@ modem = get_modem()
 ```
 
 ### Creating SX127x
+
+This is the synchronous modem class, and requires `lora-sync` to be installed:
 
 ```py
 from machine import SPI, Pin
@@ -709,18 +719,35 @@ if rx:
 Not being able to do anything else while waiting for the modem is very
 limiting. Async Python is an excellent match for this kind of application!
 
-To use async Python, wrap the modem object in an AsyncModem wrapper:
+To use async Python, first install `lora-async` and then instantiate the async
+version of the LoRA modem class. The async versions have the prefix `Async` at
+the beginning of the class name. For example:
 
 ```py
 import uasyncio
-from lora import AsyncModem
+from lora import AsyncSX1276
 
-modem = # (initialize modem here)
+def get_async_modem():
+    # The LoRa configuration will depend on your board and location, see
+    # below under "Modem Configuration" for some possible examples.
+    lora_cfg = { 'freq_khz': SEE_BELOW_FOR_CORRECT_VALUE }
 
-am = AsyncModem(modem)
+    # To instantiate SPI correctly, see
+    # https://docs.micropython.org/en/latest/library/machine.SPI.html
+    spi = SPI(0, baudrate=2000_000)
+    cs = Pin(9, mode=Pin.OUT, value=1)
+
+    # or AsyncSX1261, AsyncSX1262, AsyncSX1277, AsyncSX1278, SX1279, etc.
+    return AsyncSX1276(spi, cs,
+                       dio0=Pin(10, mode=Pin.IN),  # Optional, recommended
+                       dio1=Pin(11, mode=Pin.IN),  # Optional, recommended
+                       reset=Pin(13, mode=Pin.OPEN_DRAIN),  # Optional, recommended
+                       lora_cfg=lora_cfg)
+
+modem = get_async_modem()
 
 async def recv_coro():
-    rx = await am.recv(2000)
+    rx = await modem.recv(2000)
     if rx:
         print(f'Received: {rx}')
     else:
@@ -730,7 +757,7 @@ async def recv_coro():
 async def send_coro():
     counter = 0
     while True:
-        await am.send(f'Hello world #{counter}'.encode())
+        await modem.send(f'Hello world #{counter}'.encode())
         print('Sent!')
         await uasyncio.sleep(5)
         counter += 1
@@ -747,8 +774,8 @@ uasyncio.run(init())
 For a more complete example, see `examples/reliable_delivery/sender_async.py`.
 
 * The `modem.recv()` and `modem.send()` coroutines take the same
-  arguments as the Simple API `recv()` and `send()` functions documented
-  above.
+  arguments as the synchronous class' functions `recv()` and `send()`,
+  as documented above.
 * However, because these are async coroutines it's possible for other async
   tasks to execute while they are blocked waiting for modem operations.
 * It is possible to await the `send()` coroutine while a `recv()`
@@ -1005,8 +1032,8 @@ following different approaches:
   single argument, which is either the `Pin` that triggered a hardware interrupt
   or `None` for a soft interrupt. Refer to the documentation about [writing interrupt
   handlers](https://docs.micropython.org/en/latest/reference/isr_rules.html) for
-  more information. The `AsyncModem` class installs its own callback here, so
-  mixing this approach with `AsyncModem` is not supported.
+  more information. The `lora-async` modem classes install their own callback here,
+  so it's not possible to mix this approach with the provided asynchronous API.
 * Call `modem.poll_recv()` or `modem.poll_send()`. This takes more time
   and uses more power as it reads the modem IRQ status directly from the modem
   via SPI, but it also give the most definite result.

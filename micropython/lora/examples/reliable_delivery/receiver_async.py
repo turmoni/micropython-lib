@@ -5,7 +5,6 @@ import time
 import uasyncio
 from machine import SPI, Pin
 from micropython import const
-from lora import AsyncModem
 
 from lora_rd_settings import RECEIVER_ID, ACK_LENGTH, ACK_DELAY_MS, lora_cfg
 
@@ -20,9 +19,9 @@ _DEBUG = const(False)
 last_counters = {}
 
 
-def get_modem():
-    # from lora import SX1276
-    # return SX1276(
+def get_async_modem():
+    # from lora import AsyncSX1276
+    # return AsyncSX1276(
     #     spi=SPI(1, baudrate=2000_000, polarity=0, phase=0,
     #             miso=Pin(19), mosi=Pin(27), sck=Pin(5)),
     #     cs=Pin(18, mode=Pin.OUT, value=1),
@@ -39,7 +38,7 @@ def main():
     #
 
     print("Initializing...")
-    modem = get_modem()
+    modem = get_async_modem()
     uasyncio.run(recv_continuous(modem, rx_callback))
 
 
@@ -55,7 +54,6 @@ async def recv_continuous(modem, callback):
     # On each successful message, we await callback() to allow the application
     # to do something with the data. Callback args are sender_id (as int) and the bytes
     # of the message payload.
-    modem = AsyncModem(modem)
 
     last_counters = {}  # Track the last counter value we got from each sender ID
     ack_buffer = bytearray(ACK_LENGTH)  # reuse the same buffer for ACK packets
