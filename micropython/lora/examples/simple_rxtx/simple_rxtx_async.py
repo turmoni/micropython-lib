@@ -50,26 +50,26 @@ async def main_task():
     modem = AsyncModem(modem)
 
     await uasyncio.gather(
-        uasyncio.create_task(transmit_coro(modem)),
-        uasyncio.create_task(receive_coro(modem)),
+        uasyncio.create_task(send_coro(modem)),
+        uasyncio.create_task(recv_coro(modem)),
     )
 
 
-async def receive_coro(modem):
+async def recv_coro(modem):
     while True:
         print("Receiving...")
-        rx = await modem.receive(2000)
+        rx = await modem.recv(2000)
         if rx:
             print(f"Received: {repr(rx)}")
         else:
             print("Receive timeout!")
 
 
-async def transmit_coro(modem):
+async def send_coro(modem):
     counter = 0
     while True:
-        print("Transmitting...")
-        await modem.transmit(f"Hello world from async MicroPython #{counter}".encode())
+        print("Sending...")
+        await modem.send(f"Hello world from async MicroPython #{counter}".encode())
         print("Sent!")
         await uasyncio.sleep(5)
         counter += 1

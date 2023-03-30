@@ -56,7 +56,7 @@ def main_loop(modem):
     while True:
         # With wait=True, this function blocks until something is received and always
         # returns non-None
-        sender_id, data = receiver.receive(wait=True)
+        sender_id, data = receiver.recv(wait=True)
 
         # Do something with the data!
         print(f"Received {data} from {sender_id:#x}")
@@ -73,11 +73,11 @@ class Receiver:
         modem.calibrate()
 
         # Start receiving immediately. We expect the modem to receive continuously
-        self.will_irq = modem.start_receive(continuous=True)
+        self.will_irq = modem.start_recv(continuous=True)
         print("Modem initialized and started receive...")
 
-    def receive(self, wait=True):
-        # Receive a packet from the sender, including transmitting an ACK.
+    def recv(self, wait=True):
+        # Receive a packet from the sender, including sending an ACK.
         #
         # Returns a tuple of the 16-bit sender id and the sensor data payload.
         #
@@ -88,11 +88,11 @@ class Receiver:
         # until a packet is received. If False then it will return None
         # if no packet is available.
         #
-        # Note that because we called start_receive(continuous=True), the modem
-        # will keep receiving on its own - even if when we call transmit() to
+        # Note that because we called start_recv(continuous=True), the modem
+        # will keep receiving on its own - even if when we call send() to
         # send an ACK.
         while True:
-            rx = self.modem.poll_receive(rx_packet=self.rx_packet)
+            rx = self.modem.poll_recv(rx_packet=self.rx_packet)
 
             if isinstance(rx, RxPacket):  # value will be True or an RxPacket instance
                 decoded = self._handle_rx(rx)
@@ -102,7 +102,7 @@ class Receiver:
             if not wait:
                 return None
 
-            # Otherwise, wait for an IRQ (or have a short sleep) and then poll receive again
+            # Otherwise, wait for an IRQ (or have a short sleep) and then poll recv again
             # (receiver is not a low power node, so don't bother with sleep modes.)
             if self.will_irq:
                 while not self.modem.irq_triggered():
@@ -141,9 +141,9 @@ class Receiver:
             "<HHBBb", self.ack_buffer, 0, RECEIVER_ID, sender_id, counter, csum, rx.rssi
         )
 
-        # Time transmit to start as close to ACK_DELAY_MS after message was received as possible
+        # Time send to start as close to ACK_DELAY_MS after message was received as possible
         tx_at_ms = time.ticks_add(rx.ticks_ms, ACK_DELAY_MS)
-        tx_done = self.modem.transmit(self.ack_buffer, tx_at_ms=tx_at_ms)
+        tx_done = self.modem.send(self.ack_buffer, tx_at_ms=tx_at_ms)
 
         if _DEBUG:
             tx_time = time.ticks_diff(tx_done, tx_at_ms)

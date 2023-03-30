@@ -56,7 +56,7 @@ class BaseModem:
 
         # Current state of the modem
 
-        # _rx holds radio receive state:
+        # _rx holds radio recv state:
         #
         # - False if the radio is not receiving
         # - True if the radio is continuously receiving, or performing a single receive with
@@ -65,7 +65,7 @@ class BaseModem:
         #   (as a utime.ticks_ms() timestamp).
         #
         # Note that self._rx can be not-False even when the radio hardware is not actually
-        # receiving, if self._tx is True (transmit always takes pauses receive.)
+        # receiving, if self._tx is True (send always pauses recv.)
         self._rx = False
 
         # _rx_continuous is True if the modem is in continuous receive mode
@@ -73,11 +73,11 @@ class BaseModem:
         self._rx_continuous = False
 
         # This argument is stored from the parameter of the same name, as set in
-        # the last call to start_receive()
+        # the last call to start_recv()
         self._rx_length = None
 
-        # _tx holds radio transmit state and is simpler, True means transmitting and
-        # False means not transmitting.
+        # _tx holds radio send state and is simpler, True means sending and
+        # False means not sending.
         self._tx = False
 
         # timestamp (as utime.ticks_ms() result) of last IRQ event
@@ -90,8 +90,8 @@ class BaseModem:
         self._invert_iq = [False, False, False]
 
     def standby(self):
-        # Put the modem into standby. Can be used to cancel a continuous receive,
-        # or cancel a transmit before it completes.
+        # Put the modem into standby. Can be used to cancel a continuous recv,
+        # or cancel a send before it completes.
         #
         # Calls the private function which actually sets the mode to standby, and then
         # clears all the driver's state flags.
@@ -220,13 +220,13 @@ class BaseModem:
     #
     # ISR implementation is relatively simple, just exists to signal an optional
     # callback, record a timestamp, and wake up the hardware if
-    # needed. ppplication code is expected to call poll_transmit() or
-    # poll_receive() as applicable in order to confirm the modem state.
+    # needed. ppplication code is expected to call poll_send() or
+    # poll_recv() as applicable in order to confirm the modem state.
     #
     # This is a MP hard irq in some configurations, meaning no memory allocation is possible.
     #
     # 'pin' may also be None if this is a "soft" IRQ triggered after a receive
-    # timed out during a transmit (meaning no receive IRQ will fire, but the
+    # timed out during a send (meaning no receive IRQ will fire, but the
     # receiver should wake up and move on anyhow.)
     def _radio_isr(self, pin):
         self._last_irq = utime.ticks_ms()
@@ -264,7 +264,7 @@ class BaseModem:
 
     # Common parts of receive API
 
-    def start_receive(self, timeout_ms=None, continuous=False, rx_length=0xFF):
+    def start_recv(self, timeout_ms=None, continuous=False, rx_length=0xFF):
         # Start receiving.
         #
         # Part of common low-level modem API, see README.md for usage.
@@ -281,10 +281,10 @@ class BaseModem:
 
         if self._ant_sw and not self._tx:
             # this is guarded on 'not self._tx' as the subclass will not immediately
-            # start receiving if a transmit is in progress.
+            # start receiving if a send is in progress.
             self._ant_sw.rx()
 
-    def poll_receive(self, rx_packet=None):
+    def poll_recv(self, rx_packet=None):
         # Should be called while a receive is in progress:
         #
         # Part of common low-level modem API, see README.md for usage.
@@ -299,12 +299,12 @@ class BaseModem:
             return False
 
         if self._tx:
-            # Actually transmitting, this has to complete before we
+            # Actually sending, this has to complete before we
             # resume receiving, but we'll indicate that we are still receiving.
             #
             # (It's not harmful to fall through here and check flags anyhow, but
             # it is a little wasteful if an interrupt has just triggered
-            # poll_transmit() as well.)
+            # poll_send() as well.)
             return True
 
         packet = None
@@ -332,35 +332,35 @@ class BaseModem:
                 packet = self._read_packet(rx_packet, flags)
                 if not self._rx_continuous:
                     # Done receiving now
-                    self._end_receive()
+                    self._end_recv()
 
-        # _check_receive() will return True if a receive is ongoing and hasn't timed out,
+        # _check_recv() will return True if a receive is ongoing and hasn't timed out,
         # and also manages resuming any modem receive if needed
         #
-        # We need to always call check_receive(), but if we received a packet then this is what
+        # We need to always call check_recv(), but if we received a packet then this is what
         # we should return to the caller.
-        res = self._check_receive()
+        res = self._check_recv()
         return packet or res
 
-    def _end_receive(self):
+    def _end_recv(self):
         # Utility function to clear the receive state
         self._rx = False
         if self._ant_sw:
             self._ant_sw.idle()
 
-    def _check_receive(self):
-        # Internal function to automatically call start_receive()
+    def _check_recv(self):
+        # Internal function to automatically call start_recv()
         # again if a receive has been interrupted and the host
         # needs to start it again.
         #
-        # Return True if modem is still receiving (or transmitting, but will
-        # resume receiving after transmit finishes).
+        # Return True if modem is still receiving (or sending, but will
+        # resume receiving after send finishes).
 
         if not self._rx:
             return False  # Not receiving, nothing to do
 
         if not self.is_idle():
-            return True  # Radio is already transmitting or receiving
+            return True  # Radio is already sending or receiving
 
         rx = self._rx
 
@@ -369,7 +369,7 @@ class BaseModem:
             timeout_ms = utime.ticks_diff(rx, utime.ticks_ms())
             if timeout_ms <= 0:
                 # Timed out in software, nothing to resume
-                self._end_receive()
+                self._end_recv()
                 if _DEBUG:
                     print("Timed out in software timeout_ms={}".format(timeout_ms))
                 schedule(
@@ -384,7 +384,7 @@ class BaseModem:
                 )
             )
 
-        self.start_receive(timeout_ms, self._rx_continuous, self._rx_length)
+        self.start_recv(timeout_ms, self._rx_continuous, self._rx_length)
 
         # restore the previous version of _rx so ticks_ms deadline can't
         # slowly creep forward each time this happens
@@ -392,22 +392,22 @@ class BaseModem:
 
         return True
 
-    # Common parts of transmit API
+    # Common parts of send API
 
-    def poll_transmit(self):
-        # Check the ongoing transmit state.
+    def poll_send(self):
+        # Check the ongoing send state.
         #
         # Returns one of:
         #
-        # - True if a transmit is ongoing and the caller
+        # - True if a send is ongoing and the caller
         #   should call again.
-        # - False if no transmit is ongoing.
+        # - False if no send is ongoing.
         # - An int value exactly one time per transmission, the first time
-        #   poll_transmit() is called after a transmit ends. In this case it
-        #   is the utime.ticks_ms() timestamp of the time that the transmit completed.
+        #   poll_send() is called after a send ends. In this case it
+        #   is the utime.ticks_ms() timestamp of the time that the send completed.
         #
         # Note this function only returns an int value one time (the first time it
-        # is called after transmit completes).
+        # is called after send completes).
         #
         # Part of common low-level modem API, see README.md for usage.
         if not self._tx:
@@ -418,8 +418,8 @@ class BaseModem:
         if not (self._get_irq() & self._IRQ_TX_COMPLETE):
             # Not done. If the host and modem get out
             # of sync here, or the caller doesn't follow the sequence of
-            # transmit operations exactly, then can end up in a situation here
-            # where the modem has stopped transmitting and has gone to Standby,
+            # send operations exactly, then can end up in a situation here
+            # where the modem has stopped sending and has gone to Standby,
             # so _IRQ_TX_DONE is never set.
             #
             # For now, leaving this for the caller to do correctly. But if it becomes an issue then
@@ -433,42 +433,42 @@ class BaseModem:
         if self._ant_sw:
             self._ant_sw.idle()
 
-        # The modem just finished transmitting, so start receiving again if needed
-        self._check_receive()
+        # The modem just finished sending, so start receiving again if needed
+        self._check_recv()
 
         return ticks_ms
 
     # Simple synchronous modem API functions
     #
     # These are intended for simple applications. They block the caller until
-    # the modem operation is complete, and don't support interleaving transmit
+    # the modem operation is complete, and don't support interleaving send
     # and receive.
 
-    def transmit(self, packet, tx_at_ms=None):
-        # Transmit the given packet (byte sequence),
+    def send(self, packet, tx_at_ms=None):
+        # Send the given packet (byte sequence),
         # and return once transmission of the packet is complete.
         #
         # Returns a timestamp (result of utime.ticks_ms()) when the packet
-        # finished transmitting.
-        self.prepare_transmit(packet)
+        # finished sending.
+        self.prepare_send(packet)
 
         # If the caller specified a timestamp to start transmission at, wait until
-        # that time before triggering the transmit
+        # that time before triggering the send
         if tx_at_ms is not None:
             utime.sleep_ms(max(0, utime.ticks_diff(tx_at_ms, utime.ticks_ms())))
 
-        will_irq = self.start_transmit()  # ... and go!
+        will_irq = self.start_send()  # ... and go!
 
-        # sleep for the expected transmit time before checking if transmit has ended
+        # sleep for the expected send time before checking if send has ended
         utime.sleep_ms(self.get_time_on_air_us(len(packet)) // 1000)
 
         tx = True
         while tx is True:
-            tx = self.poll_transmit()
+            tx = self.poll_send()
             self._sync_wait(will_irq)
         return tx
 
-    def receive(self, timeout_ms=None, rx_length=0xFF, rx_packet=None):
+    def recv(self, timeout_ms=None, rx_length=0xFF, rx_packet=None):
         # Attempt to a receive a single LoRa packet, timeout after timeout_ms milliseconds
         # or wait indefinitely if no timeout is supplied (default).
         #
@@ -481,11 +481,11 @@ class BaseModem:
         # which will be reused to save allocations, but only if the received packet
         # is the same length as the rx_packet packet. If the length is different, a
         # new RxPacket instance is allocated and returned.
-        will_irq = self.start_receive(timeout_ms, False, rx_length)
+        will_irq = self.start_recv(timeout_ms, False, rx_length)
         rx = True
         while rx is True:
             self._sync_wait(will_irq)
-            rx = self.poll_receive(rx_packet)
+            rx = self.poll_recv(rx_packet)
         return rx or None
 
     def _sync_wait(self, will_irq):

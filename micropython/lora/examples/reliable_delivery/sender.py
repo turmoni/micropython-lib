@@ -141,11 +141,11 @@ class Sender:
             # Using simple API here.
             #
             # We could reduce power consumption a little by going to sleep
-            # instead of waiting for the transmit/receive to complete, but doing
+            # instead of waiting for the send/recv to complete, but doing
             # this well involves setting port-specific wakeup settings. Provided
             # "dio" pin is assigned then the MCU will mostly be in a lower power
-            # idle state while the radio transmits, at least.
-            sent_at = self.modem.transmit(payload)
+            # idle state while the radio sends, at least.
+            sent_at = self.modem.send(payload)
 
             # We expect the receiver of a valid message to start sending the ACK
             # approximately ACK_DELAY_MS after receiving the message (to allow
@@ -154,7 +154,7 @@ class Sender:
             # We start receiving as soon as we can, but allow up to
             # ACK_DELAY_MS*2 of total timing leeway - plus the time on air for
             # the message itself
-            maybe_ack = self.modem.receive(ack_packet_ms + ACK_DELAY_MS * 2, rx_packet=self.rx_ack)
+            maybe_ack = self.modem.recv(ack_packet_ms + ACK_DELAY_MS * 2, rx_packet=self.rx_ack)
 
             # Check if the packet we received is a valid ACK
             rssi = self._ack_is_valid(maybe_ack, payload[-1])

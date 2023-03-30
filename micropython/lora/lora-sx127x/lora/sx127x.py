@@ -641,7 +641,7 @@ class SX127x(BaseModem):
         # (This private version doesn't update the driver's internal state.)
         old_mode = self._set_mode(_OPMODE_MODE_STDBY) & _OPMODE_MODE_MASK
         if old_mode not in (_OPMODE_MODE_STDBY, _OPMODE_MODE_SLEEP):
-            # If we just cancelled transmitting or receiving, clear any pending IRQs
+            # If we just cancelled sending or receiving, clear any pending IRQs
             self._reg_write(_REG_IRQ_FLAGS, 0xFF)
 
     def sleep(self):
@@ -655,7 +655,7 @@ class SX127x(BaseModem):
         #
         # Note this function can return True in the case where the modem has temporarily gone to
         # standby, but there's a receive configured in software that will resume receiving the
-        # next time poll_receive() or poll_transmit() is called.
+        # next time poll_recv() or poll_send() is called.
         return self._get_mode() in (_OPMODE_MODE_STDBY, _OPMODE_MODE_SLEEP)
 
     def calibrate_image(self):
@@ -686,20 +686,20 @@ class SX127x(BaseModem):
         # calibration is implemented in the modem.
         self.calibrate_image()
 
-    def start_receive(self, timeout_ms=None, continuous=False, rx_length=0xFF):
+    def start_recv(self, timeout_ms=None, continuous=False, rx_length=0xFF):
         # Start receiving.
         #
         # Part of common low-level modem API, see README.md for usage.
-        super().start_receive(timeout_ms, continuous, rx_length)  # sets self._rx
+        super().start_recv(timeout_ms, continuous, rx_length)  # sets self._rx
 
         # will_irq if DIO0 and DIO1 both hooked up, or DIO0 and no timeout
         will_irq = self._dio0 and (self._dio1 or timeout_ms is None)
 
         if self._tx:
-            # Transmit is in progress and has priority, _check_receive() will start receive
-            # once transmit finishes (caller needs to call poll_transmit() for this to happen.)
+            # Send is in progress and has priority, _check_recv() will start receive
+            # once send finishes (caller needs to call poll_send() for this to happen.)
             if _DEBUG:
-                print("Delaying receive until transmit completes")
+                print("Delaying receive until send completes")
             return will_irq
 
         # Put the modem in a known state. It's possible a different
@@ -772,7 +772,7 @@ class SX127x(BaseModem):
         # Private function to read received packet (RxPacket object) from the
         # modem, if there is one.
         #
-        # Called from poll_receive() function, which has already checked the IRQ flags
+        # Called from poll_recv() function, which has already checked the IRQ flags
         # and verified a valid receive happened.
 
         ticks_ms = self._get_last_irq()  # IRQ timestamp for the receive
@@ -795,15 +795,15 @@ class SX127x(BaseModem):
         rx_packet.crc_error = flags & _IRQ_PAYLOAD_CRC_ERROR != 0
         return rx_packet
 
-    def prepare_transmit(self, packet):
-        # Prepare modem to start transmitting. Should be followed by a call to start_transmit()
+    def prepare_send(self, packet):
+        # Prepare modem to start sending. Should be followed by a call to start_send()
         #
         # Part of common low-level modem API, see README.md for usage.
         if len(packet) > 255:
             raise ValueError("packet too long")
 
         # Put the modem in a known state. Any current receive is suspended at this point,
-        # but calling _check_receive() will resume it later.
+        # but calling _check_recv() will resume it later.
         self._standby()  # calling private version to keep driver state as-is
 
         if self._ant_sw:
@@ -830,16 +830,16 @@ class SX127x(BaseModem):
         self._reg_write(_REG_FIFO, packet)
 
         # clear the TX Done flag in case a previous call left it set
-        # (won't happen unless poll_transmit() was not called)
+        # (won't happen unless poll_send() was not called)
         self._reg_write(_REG_IRQ_FLAGS, _IRQ_TX_DONE)
 
-    def start_transmit(self):
-        # Actually start a transmit that was loaded by calling prepare_transmit().
+    def start_send(self):
+        # Actually start a send that was loaded by calling prepare_send().
         #
         # This is split into a separate function to allow more precise timing.
         #
         # The driver doesn't verify the caller has done the right thing here, the
-        # modem will no doubt do something weird if prepare_transmit() was not called!
+        # modem will no doubt do something weird if prepare_send() was not called!
         #
         # Part of common low-level modem API, see README.md for usage.
         self._set_mode(_OPMODE_MODE_TX)
