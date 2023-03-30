@@ -6,7 +6,6 @@ import random
 import struct
 import time
 import uasyncio
-from lora import SX1262, AsyncModem
 
 from lora_rd_settings import RECEIVER_ID, ACK_LENGTH, ACK_DELAY_MS, lora_cfg
 
@@ -35,9 +34,9 @@ OUTPUT_MAX_DBM = 15
 OUTPUT_MIN_DBM = -20
 
 
-def get_modem():
-    # from lora import SX1276
-    # return SX1276(
+def get_async_modem():
+    # from lora import AsyncSX1276
+    # return AsyncSX1276(
     #     spi=SPI(1, baudrate=2000_000, polarity=0, phase=0,
     #             miso=Pin(19), mosi=Pin(27), sck=Pin(5)),
     #     cs=Pin(18, mode=Pin.OUT, value=1),
@@ -50,7 +49,7 @@ def get_modem():
 
 
 def main():
-    modem = get_modem()
+    modem = get_async_modem()
     uasyncio.run(sender_task(modem))
 
 
@@ -84,7 +83,7 @@ async def get_sensor_data():
 
 class AsyncSender:
     def __init__(self, modem, device_id):
-        self.modem = AsyncModem(modem)
+        self.modem = modem
         self.device_id = device_id
         self.counter = 0
         self.output_power = lora_cfg["output_power"]  # start with common settings power level

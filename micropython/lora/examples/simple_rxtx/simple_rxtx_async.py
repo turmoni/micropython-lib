@@ -2,7 +2,6 @@
 # MIT license; Copyright (c) 2023 Angus Gratton
 import uasyncio
 from umachine import Pin, SPI
-from lora import AsyncModem
 
 
 import micropython
@@ -10,8 +9,8 @@ import micropython
 micropython.alloc_emergency_exception_buf(256)
 
 
-def get_modem():
-    # from lora import SX1276
+def get_async_modem():
+    # from lora import AsyncSX1276
     #
     # lora_cfg = {
     #    "freq_khz": 916000,
@@ -22,7 +21,7 @@ def get_modem():
     #    "output_power": 0,  # dBm
     # }
     #
-    # return SX1276(
+    # return AsyncSX1276(
     #     spi=SPI(1, baudrate=2000_000, polarity=0, phase=0,
     #             miso=Pin(19), mosi=Pin(27), sck=Pin(5)),
     #     cs=Pin(18, mode=Pin.OUT, value=1),
@@ -35,7 +34,7 @@ def get_modem():
 
 
 async def main_task():
-    modem = AsyncModem(get_modem())
+    modem = get_async_modem()
     await uasyncio.gather(
         uasyncio.create_task(send_coro(modem)),
         uasyncio.create_task(recv_coro(modem)),
