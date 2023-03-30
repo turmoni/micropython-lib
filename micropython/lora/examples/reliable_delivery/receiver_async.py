@@ -47,7 +47,7 @@ def main():
         lora_cfg=lora_cfg,
     )
 
-    uasyncio.run(receive_continuous(modem, rx_callback))
+    uasyncio.run(recv_continuous(modem, rx_callback))
 
 
 async def rx_callback(sender_id, data):
@@ -55,8 +55,8 @@ async def rx_callback(sender_id, data):
     print(f"Received {data} from {sender_id:#x}")
 
 
-async def receive_continuous(modem, callback):
-    # Async task which receives packets from the AsyncModem receive_continuous()
+async def recv_continuous(modem, callback):
+    # Async task which receives packets from the AsyncModem recv_continuous()
     # iterator, checks if they are valid, and send back an ACK if needed.
     #
     # On each successful message, we await callback() to allow the application
@@ -70,7 +70,7 @@ async def receive_continuous(modem, callback):
 
     modem.calibrate()
 
-    async for rx in modem.receive_continuous():
+    async for rx in modem.recv_continuous():
         # Filter 'rx' packet to determine if it's valid for our application
         if len(rx) < 5:  # 4 byte header plus 1 byte checksum
             print("Invalid packet length")
@@ -96,9 +96,9 @@ async def receive_continuous(modem, callback):
         # Send the ACK
         struct.pack_into("<HHBBb", ack_buffer, 0, RECEIVER_ID, sender_id, counter, csum, rx.rssi)
 
-        # Time transmit to start as close to ACK_DELAY_MS after message was received as possible
+        # Time send to start as close to ACK_DELAY_MS after message was received as possible
         tx_at_ms = time.ticks_add(rx.ticks_ms, ACK_DELAY_MS)
-        tx_done = await modem.transmit(ack_buffer, tx_at_ms=tx_at_ms)
+        tx_done = await modem.send(ack_buffer, tx_at_ms=tx_at_ms)
 
         if _DEBUG:
             tx_time = time.ticks_diff(tx_done, tx_at_ms)

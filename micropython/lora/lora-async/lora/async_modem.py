@@ -24,52 +24,52 @@ class AsyncModem:
         self._flags = (uasyncio.ThreadSafeFlag(), uasyncio.ThreadSafeFlag())
         self._modem.set_irq_callback(self._callback)
 
-    async def receive(self, timeout_ms=None, rx_length=0xFF, rx_packet=None):
+    async def recv(self, timeout_ms=None, rx_length=0xFF, rx_packet=None):
         # Async function to receive a single LoRa packet, with an optional timeout
         #
         # Same API as the "Simple API" synchronous function
         self._flags[0].clear()
-        will_irq = self._modem.start_receive(timeout_ms, False, rx_length)
-        return await self._receive(will_irq, rx_packet)
+        will_irq = self._modem.start_recv(timeout_ms, False, rx_length)
+        return await self._recv(will_irq, rx_packet)
 
-    def receive_continuous(self, rx_length=0xFF, rx_packet=None):
+    def recv_continuous(self, rx_length=0xFF, rx_packet=None):
         # Returns an Async Iterator that continuously yields LoRa packets, until
         # the modem is told to sleep() or standby().
         #
         # Once MicroPython has PEP525 support (PR #6668) then this somewhat
-        # fiddly implementation can probably be merged with receive() into a much simpler
-        # single _receive() private coro that either yields or returns, depending on
+        # fiddly implementation can probably be merged with recv() into a much simpler
+        # single _recv() private coro that either yields or returns, depending on
         # an argument. The public API can stay the same.
-        will_irq = self._modem.start_receive(None, True, rx_length)
+        will_irq = self._modem.start_recv(None, True, rx_length)
         return AsyncContinuousReceiver(self, will_irq, rx_packet)
 
-    async def _receive(self, will_irq, rx_packet):
+    async def _recv(self, will_irq, rx_packet):
         # Second half of receiving is implemented here to share code with AsyncContinuousReceiver,
         # until future refactor is possible (see comment immediately above this one.)
         rx = True
         while rx is True:
             await self._wait(will_irq, 0, _RX_POLL_WITH_IRQ if will_irq else _RX_POLL_NO_IRQ)
-            rx = self._modem.poll_receive(rx_packet)
+            rx = self._modem.poll_recv(rx_packet)
         if rx:  # RxPacket instance
             return rx
 
-    async def transmit(self, packet, tx_at_ms=None):
+    async def send(self, packet, tx_at_ms=None):
         self._flags[1].clear()
-        self._modem.prepare_transmit(packet)
+        self._modem.prepare_send(packet)
 
         timeout_ms = self.get_time_on_air_us(len(packet))
 
         if tx_at_ms is not None:
             await uasyncio.sleep_ms(max(0, utime.ticks_diff(tx_at_ms, utime.ticks_ms())))
 
-        will_irq = self._modem.start_transmit()
+        will_irq = self._modem.start_send()
 
         tx = True
         while tx is True:
             await self._wait(will_irq, 1, timeout_ms)
-            tx = self._modem.poll_transmit()
+            tx = self._modem.poll_send()
 
-            # If we've already waited the estimated transmit time and the modem
+            # If we've already waited the estimated send time and the modem
             # is not done, timeout and poll more rapidly from here on (unsure if
             # this is necessary, outside of a serious bug, but doesn't hurt.)
             timeout_ms = _TX_POLL_LATE_IRQ
@@ -81,7 +81,7 @@ class AsyncModem:
         #
         # idx is into _flags tuple and is 0 for rx and 1 for tx
         #
-        # timeout_ms is the expected transmit time for transmits, or a reasonable
+        # timeout_ms is the expected send time for sends, or a reasonable
         # polling timeout for receives.
         if will_irq:
             # In theory we don't need to ever timeout on the flag as the ISR will always
@@ -101,7 +101,7 @@ class AsyncModem:
         # to wake both for the case of a "soft" interrupt triggered by sleep() or standby(), where
         # both tasks need to unblock and return.
         #
-        # The poll_receive() method is a no-op if _tx is set, so waking up both
+        # The poll_recv() method is a no-op if _tx is set, so waking up both
         # blocked tasks doesn't have much overhead (no second polling of modem
         # IRQ flags, for example).
         for f in self._flags:
@@ -133,7 +133,7 @@ class AsyncModem:
 
 class AsyncContinuousReceiver:
     # Stop-gap async iterator implementation until PEP525 support comes in, see
-    # longer comment  on AsyncModem.receive_continuous() above.
+    # longer comment  on AsyncModem.recv_continuous() above.
     def __init__(self, modem, will_irq, rx_packet):
         self.modem = modem
         self.will_irq = will_irq
@@ -143,7 +143,7 @@ class AsyncContinuousReceiver:
         return self
 
     async def __anext__(self):
-        res = await self.modem._receive(self.will_irq, self.rx_packet)
+        res = await self.modem._recv(self.will_irq, self.rx_packet)
         if not res:
             raise StopAsyncIteration
         return res

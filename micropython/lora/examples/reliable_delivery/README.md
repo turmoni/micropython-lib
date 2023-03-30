@@ -75,7 +75,7 @@ LoRA implicit header mode, CRCs enabled.
     packet has its own 16-bit CRC, this is included as an additional way to
     disambiguate other LoRa packets that might appear the same.
 
-* After receiving a valid data message, the receiver device should transmit
+* After receiving a valid data message, the receiver device should send
   an acknowledgement message 25ms after the modem receive completed.
 
   Acknowledgement message format:

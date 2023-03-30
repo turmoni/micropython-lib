@@ -132,7 +132,7 @@ class AsyncSender:
 
         # Send the payload, until we receive an acknowledgement or run out of retries
         for _ in range(MAX_RETRIES):
-            sent_at = await self.modem.transmit(payload)
+            sent_at = await self.modem.send(payload)
 
             # We expect the receiver of a valid message to start sending the ACK
             # approximately ACK_DELAY_MS after receiving the message (to allow
@@ -141,7 +141,7 @@ class AsyncSender:
             # We start receiving as soon as we can, but allow up to
             # ACK_DELAY_MS*2 of total timing leeway - plus the time on air for
             # the packet itself
-            maybe_ack = await self.modem.receive(
+            maybe_ack = await self.modem.recv(
                 ack_packet_ms + ACK_DELAY_MS * 2, rx_packet=self.rx_ack
             )
 

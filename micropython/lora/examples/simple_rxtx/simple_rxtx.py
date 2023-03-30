@@ -43,11 +43,11 @@ def main():
 
     counter = 0
     while True:
-        print("Transmitting...")
-        modem.transmit(f"Hello world from MicroPython #{counter}".encode())
+        print("Sending...")
+        modem.send(f"Hello world from MicroPython #{counter}".encode())
 
         print("Receiving...")
-        rx = modem.receive(timeout_ms=5000)
+        rx = modem.recv(timeout_ms=5000)
         if rx:
             print(f"Received: {repr(rx)}")
         else:

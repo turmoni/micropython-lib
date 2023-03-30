@@ -3,7 +3,7 @@
 ## Source Files
 
 * `simple_rxtx.py` is a very simple implementation of a program to alternately
-  receive and transmit LoRa packets.
+  receive and send LoRa packets.
 * `simple_rxtx_async.py` is the same program implemented using async Python.
 
 ## Running the examples

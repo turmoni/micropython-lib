@@ -433,7 +433,7 @@ Default: `False`
 LoRa supports both implicit and explicit header modes. Explicit header mode
 (`implicit_header` set to False) is the default.
 
-`implicit_header` must be set the same on both transmitter and receiver.
+`implicit_header` must be set the same on both sender and receiver.
 
 * In explicit header mode (default), each transmitted LoRa packet has a header
   which contains information about the payload length, `coding_rate` value in
@@ -442,12 +442,12 @@ LoRa supports both implicit and explicit header modes. Explicit header mode
   correct length payload and verify the CRC if enabled.
 * In implicit header mode (`implicit_header` set to True), this header is not
   sent and this information must be already be known and configured by both
-  transmitter and receiver. Specifically:
-  - `crc_en` setting should be set the same on both transmitter and receiver.
-  - `coding_rate` setting must match between the transmitter and receiver.
+  sender and receiver. Specifically:
+  - `crc_en` setting should be set the same on both sender and receiver.
+  - `coding_rate` setting must match between the sender and receiver.
   - Receiver must provide the `rx_length` argument when calling either
-    `receive()` or `start_receive()`. This length must match the length in bytes
-    of the payload sent by the transmitter.
+    `recv()` or `start_recv()`. This length must match the length in bytes
+    of the payload sent by the sender.
 
 ### `crc_en` - Enable CRCs
 Type: `bool`
@@ -457,11 +457,11 @@ Default: `True`
 LoRa packets can have a 16-bit CRC attached to determine if a packet is
 received correctly without corruption.
 
-* In explicit header mode (default), the transmitter will attach a CRC if
+* In explicit header mode (default), the sender will attach a CRC if
   `crc_en` is True. `crc_en` parameter is ignored by the receiver, which
   determines if there is a CRC based on the received header and will check it if
   so.
-* In implicit header mode, the transmitter will only include a CRC if `crc_en`
+* In implicit header mode, the sender will only include a CRC if `crc_en`
   is True and the receiver will only check the CRC if `crc_en` is True.
 
 By default, if CRC checking is enabled on the receiver then the LoRa modem driver
@@ -489,7 +489,7 @@ Type: `int`
 Default: `0x12`
 
 LoRa Sync Words are used to differentiate LoRa packets as being for Public or
-Private networks. Sync Word must match between transmitter and receiver.
+Private networks. Sync Word must match between sender and receiver.
 
 For SX127x this value is an 8-bit integer. Supported values 0x12 for Private
 Networks (default, most users) and 0x34 for Public Networks (LoRaWAN only).
@@ -551,7 +551,7 @@ Default: Both `False`
 
 If `invert_iq_tx` or `invert_iq_rx` is set then IQ polarity is inverted in the
 radio for either TX or RX, respectively. The receiver's `invert_iq_rx` setting
-must match the transmitter's `invert_iq_tx` setting.
+must match the sender's `invert_iq_tx` setting.
 
 This is necessary for LoRaWAN where end-devices transmit with inverted IQ
 relative to gateways.
@@ -588,27 +588,29 @@ Automatic Gain Control, or integer gain levels 1 to 6 where 1 is maximum gain
 
 ### Simple API
 
-The driver has a "simple" API to easily transmit and receive LoRa packets. The
+The driver has a "simple" API to easily send and receive LoRa packets. The
 API is fully synchronous, meaning the caller is blocked until the LoRa operation
-(transmit or receive) is done. The Simple API doesn't support starting a
-transmit while a receive in progress (or vice versa). It is suitable for simple
+(send or receive) is done. The Simple API doesn't support starting a
+send while a receive in progress (or vice versa). It is suitable for simple
 applications only.
 
 For an example that uses the simple API, see `examples/reliable_delivery/sender.py`.
 
-#### transmit
+#### send
+
+To send (transmit) a LoRa packet using the configured modulation settings:
 
 ```py
-def transmit(self, packet, tx_at_ms=None)
+def send(self, packet, tx_at_ms=None)
 ```
 
 Example:
 
 ```py
-modem.transmit(b'Hello world')
+modem.send(b'Hello world')
 ```
 
-* `transmit()` transmits a LoRa packet with the provided payload bytes, and returns
+* `send()` transmits a LoRa packet with the provided payload bytes, and returns
   once transmission is complete.
 * The return value is the timestamp when transmission completed, as a
   `time.ticks_ms()` result. It will be more accurate if the modem was
@@ -620,7 +622,7 @@ sent as close as possible to this timestamp and the function will block until
 that time arrives:
 
 ```py
-modem.transmit(b'Hello world', time.ticks_add(time.ticks_ms(), 250))
+modem.send(b'Hello world', time.ticks_add(time.ticks_ms(), 250))
 ```
 
 (This allows more precise timing of sent packets, without needing to account for
@@ -629,22 +631,22 @@ the length of the packet to be copied to the modem.)
 ### receive
 
 ```py
-def receive(self, timeout_ms=None, rx_length=0xFF, rx_packet=None)
+def recv(self, timeout_ms=None, rx_length=0xFF, rx_packet=None)
 ```
 
 Examples:
 
 ```py
-with_timeout = modem.receive(2000)
+with_timeout = modem.recv(2000)
 
 print(repr(with_timeout))
 
-wait_forever = modem.receive()
+wait_forever = modem.recv()
 
 print(repr(wait_forever))
 ```
 
-* `receive()` receives a LoRa packet from the modem.
+* `recv()` receives a LoRa packet from the modem.
 * Returns None on timeout, or an `RxPacket` instance with the packet on
   success.
 * Optional arguments:
@@ -688,7 +690,7 @@ However it also has the following metadata object variables:
 Example:
 
 ```py
-rx = modem.receive(1000)
+rx = modem.recv(1000)
 
 if rx:
     print(f'Received {len(rx)} byte packet at '
@@ -711,26 +713,26 @@ modem = # (initialize modem here)
 
 am = AsyncModem(modem)
 
-async def receive_coro():
-    rx = await am.receive(2000)
+async def recv_coro():
+    rx = await am.recv(2000)
     if rx:
         print(f'Received: {rx}')
     else:
         print('Timeout!')
 
 
-async def transmit_coro():
+async def send_coro():
     counter = 0
     while True:
-        await am.transmit(f'Hello world #{counter}'.encode())
+        await am.send(f'Hello world #{counter}'.encode())
         print('Sent!')
         await uasyncio.sleep(5)
         counter += 1
 
 async def init():
     await uasyncio.gather(
-        uasyncio.create_task(transmit_coro()),
-        uasyncio.create_task(receive_coro())
+        uasyncio.create_task(send_coro()),
+        uasyncio.create_task(recv_coro())
     )
 
 uasyncio.run(init())
@@ -738,16 +740,16 @@ uasyncio.run(init())
 
 For a more complete example, see `examples/reliable_delivery/sender_async.py`.
 
-* The `modem.receive()` and `mode.transmit()` coroutines take the same
-  arguments as the Simple API `receive()` and `transmit()` functions documented
+* The `modem.recv()` and `modem.send()` coroutines take the same
+  arguments as the Simple API `recv()` and `send()` functions documented
   above.
 * However, because these are async coroutines it's possible for other async
   tasks to execute while they are blocked waiting for modem operations.
-* It is possible to await the `transmit()` coroutine while a `receive()`
+* It is possible to await the `send()` coroutine while a `recv()`
   is in progress. The receive will automatically resume once the modem finishes
-  transmitting. Transmit always has priority over receive.
-* However, at most one task should be awaiting each of receive and transmit. For
-  example, it's not possible for two tasks to `await modem.transmit()` at the
+  sending. Send always has priority over receive.
+* However, at most one task should be awaiting each of receive and send. For
+  example, it's not possible for two tasks to `await modem.send()` at the
   same time.
 
 #### Async Continuous Receive
@@ -757,7 +759,7 @@ receive packets from the modem:
 
 ```py
 async def keep_receiving():
-    async for packet in am.receive_continuous():
+    async for packet in am.recv_continuous():
         print(f'Received: {packet}')
 ```
 
@@ -767,7 +769,7 @@ Receiving will continue and the iterator will yield packets unless another task
 calls `modem.stop()` or `modem.standby()` (see below for a description of these
 functions).
 
-Same as the async `receive()` API, it's possible for another task to transmit while
+Same as the async `recv()` API, it's possible for another task to send while
 this iterator is in use.
 
 ## Low-Level API
@@ -787,7 +789,7 @@ your board then this may be the API for you!
 ### Receiving
 
 ```py
-will_irq =  modem.start_receive(timeout_ms=1000, continuous=False)
+will_irq =  modem.start_recv(timeout_ms=1000, continuous=False)
 
 rx = True
 while rx is True:
@@ -796,7 +798,7 @@ while rx is True:
         # if necessary call modem.irq_triggered() to verify
         # that the modem IRQ was actually triggered.
         pass
-    rx = modem.poll_receive()
+    rx = modem.poll_recv()
 
     # Do anything else you need the application to do
 
@@ -811,10 +813,10 @@ For an example that uses the low-level receive API for continuous receive, see
 
 The steps to receive packet(s) with the low-level API are:
 
-1. Call `modem.start_receive(timeout_ms=None, continuous=False, rx_length=0xFF)`.
+1. Call `modem.start_recv(timeout_ms=None, continuous=False, rx_length=0xFF)`.
 
    - `timeout_ms` is an optional timeout in milliseconds, same as the Simple API
-     receive().
+     recv().
    - Set `continuous=True` for the modem to continuously receive and not go into
      standby after the first packet is received. If setting `continuous` to
      `True`, `timeout_ms` must be `None`.
@@ -830,11 +832,11 @@ The steps to receive packet(s) with the low-level API are:
    Alternatively, if `timeout_ms` was set then caller can wait for at least the
    timeout period before checking if the modem received anything or timed out.
 
-    It is also possible to simply call `poll_receive()` in a loop, but doing
+    It is also possible to simply call `poll_recv()` in a loop, but doing
     this too frequently may significantly degrade the RF receive performance
     depending on the hardware.
 
-3. Call `modem.poll_receive()`. This function checks the receive state and
+3. Call `modem.poll_recv()`. This function checks the receive state and
    returns a value indicating the current state:
 
    - `True` if the modem is still receiving and the caller should call this
@@ -843,8 +845,8 @@ The steps to receive packet(s) with the low-level API are:
      * Modem is still waiting in 'single' mode (`continuous=False`) to receive a
        packet or time out.
      * Modem is in continuous receive mode so will always be receiving.
-     * The modem is actually transmitting right now, but the driver will resume
-       receiving after the transmit completes.
+     * The modem is actually sending right now, but the driver will resume
+       receiving after the send completes.
      * The modem received a packet with an invalid CRC (and `modem.rx_crc_error
        = False`). The driver has just now discarded it and resumed the modem
        receive operation.
@@ -858,23 +860,23 @@ The steps to receive packet(s) with the low-level API are:
        below.
 
    - An instance of the `RxPacket` class. This means the modem has received this
-     packet since the last call to `poll_receive()`. Whether or not the modem is
+     packet since the last call to `poll_recv()`. Whether or not the modem is
      still receiving after this depends on whether the receive was started in
      `continuous` mode or not.)
 
-4. If `poll_receive()` returned `True`, go back to step 2 and wait for the next
-   opportunity to call `poll_receive()`. (Note that it's necessary to test using
+4. If `poll_recv()` returned `True`, go back to step 2 and wait for the next
+   opportunity to call `poll_recv()`. (Note that it's necessary to test using
    `is True` to distinguish between `True` and a new packet.)
 
-It is possible to also transmit packets while receiving and looping between
+It is possible to also send packets while receiving and looping between
 steps 2 and 4. The driver will automatically suspend receiving and resume it
-again once transmitting is done. It's OK to call either the Simple API
-`transmit()` function or the low-level transmit API (see below) in order to do
+again once sending is done. It's OK to call either the Simple API
+`send()` function or the low-level send API (see below) in order to do
 this.
 
 The purpose of the low-level API is to allow code to perform other unrelated
 functions during steps 2 and 3. It's still recommended to call
-`modem.poll_receive()` as soon as possible after a modem interrupt has
+`modem.poll_recv()` as soon as possible after a modem interrupt has
 occurred, especially in continuous receive mode when multiple packets may be
 received rapidly.
 
@@ -882,74 +884,74 @@ To cancel a receive in progress, call `modem.standby()` or `modem.sleep()`, see
 below for descriptions of these functions.
 
 *Important*: None of the MicroPython lora driver is thread-safe. It's OK for
-different MicroPython threads to manage transmit and receive, but the caller is
+different MicroPython threads to manage send and receive, but the caller is
 responsible for adding locking so that different threads are not calling any
 modem APIs concurrently. Async MicroPython may provide a cleaner and simpler
 choice for this kind of firmware architecture.
 
-### Transmitting
+### Sending
 
-The low-level API for transmitting is similar to the low-level API for receiving:
+The low-level API for sending is similar to the low-level API for receiving:
 
-1. Call `modem.prepare_transmit(payload)` with the packet payload. This will put
+1. Call `modem.prepare_send(payload)` with the packet payload. This will put
    the modem into standby (pausing receive if necessary), configure the modem
    registers, and copy the payload into the modem FIFO buffer.
-2. Call `modem.start_transmit(packet)` to actually start transmitting.
+2. Call `modem.start_send(packet)` to actually start sending.
 
-   Transmitting is split into these two steps to allow accurate transmit
-   timing. `prepare_transmit()` may take a variable amount of time to copy data
-   to the modem, configure registers, etc. Then `start_transmit()` only performs
-   the minimum fixed duration operation to start transmitting, so transmit
+   Sending is split into these two steps to allow accurate send
+   timing. `prepare_send()` may take a variable amount of time to copy data
+   to the modem, configure registers, etc. Then `start_send()` only performs
+   the minimum fixed duration operation to start sending, so transmit
    should start very soon after this function is called.
 
-   The return value of `start_transmit()` function is truthy if an interrupt is
-   enabled to signal the transmit completing, falsey otherwise.
+   The return value of `start_send()` function is truthy if an interrupt is
+   enabled to signal the send completing, falsey otherwise.
 
-   Not calling both `prepare_transmit()` or `start_transmit()` in order, or
-   calling any other modem functions between `prepare_transmit()` and
-   `start_transmit()`, is not supported and will result in incorrect behaviour.
+   Not calling both `prepare_send()` or `start_send()` in order, or
+   calling any other modem functions between `prepare_send()` and
+   `start_send()`, is not supported and will result in incorrect behaviour.
 
-3. Wait for the transmit to complete. This is possible in any of three
+3. Wait for the send to complete. This is possible in any of three
    different ways:
    -  If interrupts are enabled, wait for an interrupt to occur. Steps may include
       configuring the modem interrupt pins as wake sources and putting the host
       into a light sleep mode. See the general description of "Interrupts", below.
    - Calculate the packet "time on air" by calling
      `modem.get_time_on_air_us(len(packet))` and wait at least this long.
-   - Call `modem.poll_transmit()` in a loop (see next step) until it confirms
-     the transmit has completed.
-4. Call `modem.poll_transmit()` to check transmission state, and to
+   - Call `modem.poll_send()` in a loop (see next step) until it confirms
+     the send has completed.
+4. Call `modem.poll_send()` to check transmission state, and to
    automatically resume a receive operation if one was suspended by
-   `prepare_transmit()`. The result of this function is one of:
+   `prepare_send()`. The result of this function is one of:
 
-    - `True` if a transmit is in progress and the caller
+    - `True` if a send is in progress and the caller
       should call again.
 
-    - `False` if no transmit is in progress.
+    - `False` if no send is in progress.
 
-    - An `int` value. This is returned the first time `poll_transmit()` is
-      called after a transmit ended. The value is the `time.ticks_ms()`
-      timestamp of the time that the transmit completed. If interrupts are
-      enabled, this is the time the "transmit done" ISR executed. Otherwise, it
-      will be the time that `poll_transmit()` was just called.
+    - An `int` value. This is returned the first time `poll_send()` is
+      called after a send ended. The value is the `time.ticks_ms()`
+      timestamp of the time that the send completed. If interrupts are
+      enabled, this is the time the "send done" ISR executed. Otherwise, it
+      will be the time that `poll_send()` was just called.
 
-   Note that `modem.poll_transmit()` returns an `int` only one time per
+   Note that `modem.poll_send()` returns an `int` only one time per
    successful transmission. Any subsequent calls will return `False` as there is
-   no longer a transmit in progress.
+   no longer a send in progress.
 
-   To abort a transmit in progress, call `modem.standby()` or `modem.sleep()`,
+   To abort a send in progress, call `modem.standby()` or `modem.sleep()`,
    see the descriptions of these functions below. Subsequent calls to
-   `poll_transmit()` will return `False`.
-5. If `poll_transmit()` returned `True`, repeat steps 3 through 5.
+   `poll_send()` will return `False`.
+5. If `poll_send()` returned `True`, repeat steps 3 through 5.
 
-*Important*: Unless a transmission is aborted, `poll_transmit()` **MUST be
-called** at least once after `start_transmit()` and should be repeatedly called
-until it returns a value other than `True`. `poll_transmit()` can also be called
-after a transmit is aborted, but this is optional. If `poll_transmit()` is not
+*Important*: Unless a transmission is aborted, `poll_send()` **MUST be
+called** at least once after `start_send()` and should be repeatedly called
+until it returns a value other than `True`. `poll_send()` can also be called
+after a send is aborted, but this is optional. If `poll_send()` is not
 called correctly then the driver's internal state will not correctly update and
 no subsequent receive will be able to start.
 
-It's also possible to mix the simple `transmit()` API with the low-level receive
+It's also possible to mix the simple `send()` API with the low-level receive
 API, if this is more convenient for your application.
 
 ### Interrupts
@@ -959,7 +961,7 @@ low-level API to handle interrupts correctly.
 
 It's only possible to rely on interrupts if the correct hardware interrupt lines
 are configured. Consult the modem reference datasheet, or check if the value of
-`start_receive()` or `start_transmit()` is truthy, in order to know if hardware
+`start_recv()` or `start_send()` is truthy, in order to know if hardware
 interrupts can be used. Otherwise, the modem must be polled to know when an
 operation has completed.
 
@@ -975,8 +977,8 @@ There are two kinds of interrupts:
   finishes its operation.
 * A "soft" interrupt is triggered by the driver if an operation is aborted (see
   `standby()` and `sleep()`, below), or if a receive operation "soft times
-  out". A receive "soft times out" if a receive is paused by a transmit
-  operation and after the transmit operation completes then the timeout period
+  out". A receive "soft times out" if a receive is paused by a send
+  operation and after the send operation completes then the timeout period
   for the receive has already elapsed. In these cases, the driver's radio ISR
   routine is called but no hardware interrupt occurs.
 
@@ -986,11 +988,11 @@ following different approaches:
 * Port-specific functions to determine a hardware wakeup cause. Note that this
   can only detect hardware interrupts.
 * Call the `modem.irq_triggered()` function. This is a lightweight function that
-  returns True if the modem ISR has been executed since the last time a transmit
-  or receive started. It is cleared when `poll_receive()` or `poll_transmit()`
+  returns True if the modem ISR has been executed since the last time a send
+  or receive started. It is cleared when `poll_recv()` or `poll_send()`
   is called after an interrupt, or when a new operation is started. The idea is
-  to use this as a lightweight "should I call `poll_receive()` or
-  `poll_transmit()` now?" check function if there's no easy way to determine
+  to use this as a lightweight "should I call `poll_recv()` or
+  `poll_send()` now?" check function if there's no easy way to determine
   which interrupt has woken the board up.
 * Implement a custom interrupt callback function and call
   `modem.set_irq_callback()` to install it. The function will be called with a
@@ -999,7 +1001,7 @@ following different approaches:
   handlers](https://docs.micropython.org/en/latest/reference/isr_rules.html) for
   more information. The `AsyncModem` class installs its own callback here, so
   mixing this approach with `AsyncModem` is not supported.
-* Call `modem.poll_receive()` or `modem.poll_transmit()`. This takes more time
+* Call `modem.poll_recv()` or `modem.poll_send()`. This takes more time
   and uses more power as it reads the modem IRQ status directly from the modem
   via SPI, but it also give the most definite result.
 
@@ -1025,22 +1027,22 @@ For an alternative method to know about CRC errors when they occur, set
 Calling `modem.standby()` puts the modem immediately into standby mode. In the
 case of SX1261 and SX1262, the 32MHz oscillator is started.
 
-Any current transmit or receive operations are immediately aborted.  The
+Any current send or receive operations are immediately aborted.  The
 implications of this depends on the API in use:
 
 * The simple API does not support calling `standby()` while a receive or
-  transmit is in progress.
-* The async API handles this situation automatically. Any blocked `transmit()`
-  or `receive()` async coroutine will return None. The `receive_continuous()`
+  send is in progress.
+* The async API handles this situation automatically. Any blocked `send()`
+  or `recv()` async coroutine will return None. The `recv_continuous()`
   iterator will stop iterating.
 * The low-level API relies on the programmer to handle this case. When the modem
   goes to standby, a "soft interrupt" occurs that will trigger the radio ISR and
   any related callback, but this is not a hardware interrupt so may not wake the
   CPU if the programmer has put it back to sleep. Any subsequent calls to
-  `poll_receive()` or `poll_transmit()` will both return `(False, None)` as no
+  `poll_recv()` or `poll_send()` will both return `(False, None)` as no
   operation is in progress. The programmer needs to ensure that any code that is
   blocking waiting for an interrupt has the chance to wake up and call
-  `poll_receive()` and/or `poll_transmit()` to detect that the operation(s) have
+  `poll_recv()` and/or `poll_send()` to detect that the operation(s) have
   been aborted.
 
 ### Modem Sleep
@@ -1051,20 +1053,20 @@ operation is started, or can be woken manually by calling
 `modem.standby()`. Waking the modem may take some time, consult the modem
 datasheet for details.
 
-As with `standby()`, any current transmit or receive operations are immediately
+As with `standby()`, any current send or receive operations are immediately
 aborted. The implications of this are the same as listed for standby, above.
 
 ### Check if modem is idle
 
 The `modem.is_idle()` function will return True unless the modem is currently
-transmitting or receiving.
+sending or receiving.
 
 ### Packet length calculations
 
 Calling `modem.get_time_on_air_us(plen)` will return the "on air time" in
 microseconds for a packet of length `plen`, according to the current modem
 configuration. This can be used to synchronise modem operations, choose
-timeouts, or predict when a transmit will complete.
+timeouts, or predict when a send will complete.
 
 Unlike the other modem API functions, this function doesn't interact with
 hardware at all so it can be safely called concurrently with other modem APIs.
@@ -1087,9 +1089,9 @@ class MyAntennaSwitch:
         pass
 ```
 
-* `tx()` is called a short time before the modem starts transmitting.
+* `tx()` is called a short time before the modem starts sending.
 * `rx()` is called a short time before the modem starts receiving.
-* `idle()` is called at some point after each transmit or receive completes, and
+* `idle()` is called at some point after each send or receive completes, and
   may be called multiple times.
 
 The meaning of `tx_arg` depends on the modem:
