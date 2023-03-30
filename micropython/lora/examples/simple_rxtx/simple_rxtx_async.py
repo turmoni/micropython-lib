@@ -2,7 +2,7 @@
 # MIT license; Copyright (c) 2023 Angus Gratton
 import uasyncio
 from umachine import Pin, SPI
-from lora import SX1262, AsyncModem
+from lora import AsyncModem
 
 
 import micropython
@@ -10,45 +10,32 @@ import micropython
 micropython.alloc_emergency_exception_buf(256)
 
 
-async def main_task():
-    # Initializing the modem.
+def get_modem():
+    # from lora import SX1276
     #
-    # TODO: Currently these are some settings I was using for testing, probably
-    # to replace with a comment and an exception saying "put modem
-    # init code here!"
+    # lora_cfg = {
+    #    "freq_khz": 916000,
+    #    "sf": 8,
+    #    "bw": "500",  # kHz
+    #    "coding_rate": 8,
+    #    "preamble_len": 12,
+    #    "output_power": 0,  # dBm
+    # }
+    #
+    # return SX1276(
+    #     spi=SPI(1, baudrate=2000_000, polarity=0, phase=0,
+    #             miso=Pin(19), mosi=Pin(27), sck=Pin(5)),
+    #     cs=Pin(18, mode=Pin.OUT, value=1),
+    #     dio0=Pin(26, mode=Pin.IN),
+    #     dio1=Pin(35, mode=Pin.IN),
+    #     reset=Pin(14, mode=Pin.OPEN_DRAIN),
+    #     lora_cfg=lora_cfg,
+    # )
+    raise NotImplementedError("Replace this function with one that returns a lora modem instance")
 
-    lora_cfg = {
-        "freq_khz": 916000,
-        "sf": 8,
-        "bw": "500",  # kHz
-        "coding_rate": 8,
-        "preamble_len": 12,
-        "output_power": 0,  # dBm
-    }
 
-    spi = SPI(
-        1,
-        baudrate=2000_000,
-        polarity=0,
-        phase=0,
-        sck=Pin(10),
-        mosi=Pin(11),
-        miso=Pin(12),
-    )
-
-    modem = SX1262(
-        spi,
-        cs=Pin(3, mode=Pin.OUT, value=1),
-        busy=Pin(2, mode=Pin.IN),
-        dio1=Pin(20, mode=Pin.IN),
-        reset=Pin(15, mode=Pin.OUT),
-        dio2_rf_sw=True,
-        dio3_tcxo_millivolts=3300,
-        lora_cfg=lora_cfg,
-    )
-
-    modem = AsyncModem(modem)
-
+async def main_task():
+    modem = AsyncModem(get_modem())
     await uasyncio.gather(
         uasyncio.create_task(send_coro(modem)),
         uasyncio.create_task(recv_coro(modem)),

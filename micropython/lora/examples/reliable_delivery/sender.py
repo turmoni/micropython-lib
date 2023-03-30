@@ -5,7 +5,6 @@ from machine import SPI, Pin
 import random
 import struct
 import time
-from lora import SX1262
 
 from lora_rd_settings import RECEIVER_ID, ACK_LENGTH, ACK_DELAY_MS, lora_cfg
 
@@ -34,38 +33,23 @@ OUTPUT_MAX_DBM = 15
 OUTPUT_MIN_DBM = -20
 
 
+def get_modem():
+    # from lora import SX1276
+    # return SX1276(
+    #     spi=SPI(1, baudrate=2000_000, polarity=0, phase=0,
+    #             miso=Pin(19), mosi=Pin(27), sck=Pin(5)),
+    #     cs=Pin(18, mode=Pin.OUT, value=1),
+    #     dio0=Pin(26, mode=Pin.IN),
+    #     dio1=Pin(35, mode=Pin.IN),
+    #     reset=Pin(14, mode=Pin.OPEN_DRAIN),
+    #     lora_cfg=lora_cfg,
+    # )
+    raise NotImplementedError("Replace this function with one that returns a lora modem instance")
+
+
 def main():
-    # Initializing the modem.
-    #
-    # TODO: Currently these are some settings I was using for testing, probably
-    # to replace with a comment and an exception saying "put modem
-    # init code here!"
+    modem = get_modem()
 
-    spi = SPI(
-        1,
-        baudrate=2000_000,
-        polarity=0,
-        phase=0,
-        sck=Pin(10),
-        mosi=Pin(11),
-        miso=Pin(12),
-    )
-
-    modem = SX1262(
-        spi,
-        cs=Pin(3, mode=Pin.OUT, value=1),
-        busy=Pin(2, mode=Pin.IN),
-        dio1=Pin(20, mode=Pin.IN),
-        reset=Pin(15, mode=Pin.OUT),
-        dio2_rf_sw=True,
-        dio3_tcxo_millivolts=3300,
-        lora_cfg=lora_cfg,
-    )
-
-    main_loop(modem)
-
-
-def main_loop(modem):
     # Unique ID of this sender, 16-bit number. This method of generating an ID is pretty crummy,
     # if using this in a real application then probably better to store these in the filesystem or
     # something like that

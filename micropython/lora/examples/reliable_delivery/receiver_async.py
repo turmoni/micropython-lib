@@ -5,7 +5,7 @@ import time
 import uasyncio
 from machine import SPI, Pin
 from micropython import const
-from lora import SX1276, AsyncModem
+from lora import AsyncModem
 
 from lora_rd_settings import RECEIVER_ID, ACK_LENGTH, ACK_DELAY_MS, lora_cfg
 
@@ -20,33 +20,26 @@ _DEBUG = const(False)
 last_counters = {}
 
 
+def get_modem():
+    # from lora import SX1276
+    # return SX1276(
+    #     spi=SPI(1, baudrate=2000_000, polarity=0, phase=0,
+    #             miso=Pin(19), mosi=Pin(27), sck=Pin(5)),
+    #     cs=Pin(18, mode=Pin.OUT, value=1),
+    #     dio0=Pin(26, mode=Pin.IN),
+    #     dio1=Pin(35, mode=Pin.IN),
+    #     reset=Pin(14, mode=Pin.OPEN_DRAIN),
+    #     lora_cfg=lora_cfg,
+    # )
+    raise NotImplementedError("Replace this function with one that returns a lora modem instance")
+
+
 def main():
     # Initializing the modem.
     #
-    # TODO: Currently these are some settings I was using for testing, probably
-    # to replace with a comment and an exception saying "put modem
-    # init code here!"
 
-    spi = SPI(
-        0,
-        baudrate=2_000_000,
-        polarity=0,
-        phase=0,
-        sck=Pin(6),
-        mosi=Pin(7),
-        miso=Pin(4),
-    )
-    cs = Pin(9, mode=Pin.OUT, value=1)
-
-    modem = SX1276(
-        spi,
-        cs,
-        dio0=Pin(10, mode=Pin.PULL_UP),
-        dio1=Pin(11, mode=Pin.PULL_UP),
-        reset=Pin(13, mode=Pin.OPEN_DRAIN),
-        lora_cfg=lora_cfg,
-    )
-
+    print("Initializing...")
+    modem = get_modem()
     uasyncio.run(recv_continuous(modem, rx_callback))
 
 

@@ -36,8 +36,10 @@ One way to run this example interactively:
    examples (see main lora `README.md` in the above directory for details).
 2. Edit the `lora_rd_settings.py` file to set the frequency and other protocol
    settings for your region and hardware (see main lora `README.md`).
-3. Edit the program(s) you plan to run to set the modem constructors, pin
-   assignments, etc. to match your board.
+3. Edit the program you plan to run and fill in the `get_modem()` function with
+   the correct modem type, pin assignments, etc. for your board (see top-level
+   README). Note the `get_modem()` function should use the existing `lora_cfg`
+   variable, which holds the settings imported from `lora_rd_settings.py`.
 4. Change to this directory in a terminal.
 5. Run `mpremote mount . exec receiver.py` on one board and `mpremote mount
    . exec sender.py` on another (or swap in `receiver_async.py` and/or
