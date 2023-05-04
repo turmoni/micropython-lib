@@ -25,14 +25,15 @@ interface.
 
 ## Installation
 
-First, install at least one of the base LoRa packages:
+First, install at least one of the following "base" LoRa packages:
 
 - `lora-sync` to use the synchronous LoRa modem API.
 - `lora-async` to use the asynchronous LoRa modem API with
   [uasyncio](https://docs.micropython.org/en/latest/library/uasyncio.html). Support
   for `uasyncio` must be included in your MicroPython build to use `lora-async`.
 
-Second, install at least one modem chipset driver for the modem you have:
+Second, install at least one of the following modem chipset drivers for the
+modem model that matches your hardware:
 
 - `lora-sx126x` for SX1261 & SX1262 support.
 - `lora-sx127x` for SX1276-SX1279 support.
@@ -40,9 +41,8 @@ Second, install at least one modem chipset driver for the modem you have:
 It's recommended to install only the packages that you need, to save firmware
 size.
 
-Installing any of these packages will automatically install the common base
-package, `lora`. However the `lora` package by itself does not contain any
-complete driver for a LoRa modem chipset.
+Installing any of these packages will automatically also install a common
+base package, `lora`.
 
 For more information about how to install packages, or "freeze" them into a
 firmware image, consult the [MicroPython documentation on "Package
