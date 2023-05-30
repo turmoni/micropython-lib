@@ -64,7 +64,7 @@ class AsyncModem:
         self._flags[1].clear()
         self.prepare_send(packet)
 
-        timeout_ms = self.get_time_on_air_us(len(packet))
+        timeout_ms = self.get_time_on_air_us(len(packet)) // 1000 + 50
 
         if tx_at_ms is not None:
             await uasyncio.sleep_ms(max(0, utime.ticks_diff(tx_at_ms, utime.ticks_ms())))
@@ -82,7 +82,7 @@ class AsyncModem:
             if _DEBUG:
                 print(f"poll_send returned tx={tx}")
 
-            # If we've already waited the estimated send time and the modem
+            # If we've already waited the estimated send time (plus 50ms) and the modem
             # is not done, timeout and poll more rapidly from here on (unsure if
             # this is necessary, outside of a serious bug, but doesn't hurt.)
             timeout_ms = _TX_POLL_LATE_IRQ
