@@ -7,6 +7,9 @@ import uasyncio
 import utime
 from micropython import const
 
+# Set to True to get some additional printed debug output.
+_DEBUG = const(False)
+
 # Some "belts and braces" timeouts when using IRQs, to wake up if an IRQ hasn't
 # fired as expected. Also a timeout for how rapidly to poll the modem during TX
 # if no IRQ is enabled.
@@ -66,12 +69,18 @@ class AsyncModem:
         if tx_at_ms is not None:
             await uasyncio.sleep_ms(max(0, utime.ticks_diff(tx_at_ms, utime.ticks_ms())))
 
+        if _DEBUG:
+            print("start_send")
+
         will_irq = self.start_send()
 
         tx = True
         while tx is True:
             await self._wait(will_irq, 1, timeout_ms)
             tx = self.poll_send()
+
+            if _DEBUG:
+                print(f"poll_send returned tx={tx}")
 
             # If we've already waited the estimated send time and the modem
             # is not done, timeout and poll more rapidly from here on (unsure if
@@ -87,6 +96,8 @@ class AsyncModem:
         #
         # timeout_ms is the expected send time for sends, or a reasonable
         # polling timeout for receives.
+        if _DEBUG:
+            print(f"wait will_irq={will_irq} timeout_ms={timeout_ms}")
         if will_irq:
             # In theory we don't need to ever timeout on the flag as the ISR will always
             # fire, but this gives a workaround for possible race conditions or dropped interrupts.
@@ -96,6 +107,9 @@ class AsyncModem:
                 pass
         else:
             await uasyncio.sleep_ms(timeout_ms)
+
+        if _DEBUG:
+            print(f"wait complete")
 
     def _callback(self, _):
         # IRQ callback from BaseModem._radio_isr. Hard IRQ context unless _DEBUG

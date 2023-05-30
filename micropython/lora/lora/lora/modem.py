@@ -6,6 +6,7 @@ import umachine
 import utime
 from micropython import const, schedule
 
+# Set to True to get some additional printed debug output.
 _DEBUG = const(False)
 
 
