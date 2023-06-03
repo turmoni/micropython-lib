@@ -5,8 +5,6 @@ from .keycodes import KEYPAD_KEYS_TO_KEYCODES
 from micropython import const
 _INTERFACE_PROTOCOL_KEYBOARD = const(0x01)
 
-# Basic 3-button mouse HID Report Descriptor.
-# This is cribbed from Appendix E.10 of the HID v1.11 document.
 _KEYPAD_REPORT_DESC = bytes(
     [
         0x05, 0x01,  # Usage Page (Generic Desktop)
@@ -17,7 +15,7 @@ _KEYPAD_REPORT_DESC = bytes(
                 0x29, 0xff,  # Usage Maximum (ff),
                 0x15, 0x00,  # Logical Minimum (0),
                 0x25, 0xff,  # Logical Maximum (ff),
-                0x95, 0x03,  # Report Count (3),
+                0x95, 0x01,  # Report Count (1),
                 0x75, 0x08,  # Report Size (8),
                 0x81, 0x00,  # Input (Data, Array, Absolute)
             0xC0,  # End Collection
