@@ -9,7 +9,6 @@ from .utils import (
 from micropython import const
 import micropython
 import ustruct
-import time
 from machine import Timer
 
 _INTERFACE_CLASS_MSC = const(0x08)
@@ -26,7 +25,7 @@ EP_OUT_FLAG = const(0x7F)
 
 
 class CBW:
-    """Command Block Wrapper"""
+    """Command Block Wrapper - handles the incoming data from the host to the device"""
 
     DIR_OUT = const(0)
     DIR_IN = const(1)
@@ -86,7 +85,7 @@ class CBW:
 
 
 class CSW:
-    """Command Status Wrapper"""
+    """Command Status Wrapper - handles status messages from the device to the host"""
 
     STATUS_PASSED = const(0)
     STATUS_FAILED = const(1)
@@ -111,7 +110,13 @@ class CSW:
 
 
 class MSCInterface(USBInterface):
-    """Mass storage interface - contains the USB parts"""
+    """Mass storage interface - contains the USB parts
+
+    Properties:
+    storage_device -- A StorageDevice object used by this instance, which handles all SCSI/filesystem-related operations
+    cbw -- A CBW object to keep track of requests from the host to the device
+    csw -- A CSW object to send status responses to the host
+    lun -- The LUN of this device (currently only 0)"""
 
     MSC_STAGE_CMD = const(0)
     MSC_STAGE_DATA = const(1)
@@ -130,6 +135,16 @@ class MSCInterface(USBInterface):
         uart=None,
         print_logs=False,
     ):
+        """Create a new MSCInterface object
+
+        Properties are all optional:
+        subclass -- should always be _INTERFACE_SUBCLASS_SCSI
+        protocol -- should likely always be _PROTOCOL_BBB
+        filesystem -- can be left as None to have no currently mounted filesystem, or can be a bytes-like object containing a filesystem to use
+        lcd -- an optional LCD object with a "putstr" method, used for logging
+        uart -- an optional UART for serial logging
+        print_logs -- set to True to log via print statements, useful if you have put the REPL on a UART
+        """
         super().__init__(_INTERFACE_CLASS_MSC, subclass, protocol)
         self.lcd = lcd
         self.uart = uart
@@ -173,6 +188,11 @@ class MSCInterface(USBInterface):
         return (desc, [], (self.ep_out, self.ep_in))
 
     def try_to_prepare_cbw(self, args=None):
+        """Attempt to prepare a CBW, and if it fails, reschedule this.
+
+        This is mostly needed due to a bug where control callbacks aren't being received for interfaces other than the first
+        that have been added. Otherwise calling prepare_cbw after the max LUN request has been received works fine.
+        """
         try:
             self.prepare_cbw()
         except KeyError:
@@ -204,7 +224,7 @@ class MSCInterface(USBInterface):
         return False
 
     def reset(self):
-        """Theoretically reset, in reality just break things a bit"""
+        """Theoretically reset, in reality just break things a bit at the moment"""
         self.log("reset()")
         # This doesn't work properly at the moment, needs additional
         # functionality in the C side
@@ -437,7 +457,13 @@ class MSCInterface(USBInterface):
 
 
 class StorageDevice:
-    """Storage Device - holds the SCSI parts"""
+    """Storage Device - holds the SCSI parts
+
+    Properties:
+    filesystem -- a bytes-like thing representing the data this device is handling. If set to None, then the
+                  object will behave as if there is no medium inserted. This can be changed at runtime.
+    block_size -- what size the blocks are for SCSI commands. This should probably be left as-is, at 512.
+    """
 
     class StorageError(OSError):
         def __init__(self, message, status):
@@ -449,6 +475,10 @@ class StorageDevice:
     INVALID_COMMAND = const(0x02)
 
     def __init__(self, filesystem):
+        """Create a StorageDevice object
+
+        filesystem -- either None or a bytes-like object to represent the filesystem being presented
+        """
         self.filesystem = filesystem
         self.block_size = 512
         self.sense = None

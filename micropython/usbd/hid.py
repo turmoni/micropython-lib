@@ -6,13 +6,15 @@ from .device import (
 from .utils import (
     endpoint_descriptor,
     split_bmRequestType,
-    EP_OUT_FLAG,
     STAGE_SETUP,
     REQ_TYPE_STANDARD,
     REQ_TYPE_CLASS,
 )
 from micropython import const
 import ustruct
+
+EP_IN_FLAG = const(1 << 7)
+EP_OUT_FLAG = const(0x7F)
 
 _DESC_HID_TYPE = const(0x21)
 _DESC_REPORT_TYPE = const(0x22)
@@ -45,6 +47,7 @@ class HIDInterface(USBInterface):
         extra_descriptors=[],
         protocol=_INTERFACE_PROTOCOL_NONE,
         interface_str=None,
+        use_out_ep=False,
     ):
         # Construct a new HID interface.
         #
@@ -60,12 +63,21 @@ class HIDInterface(USBInterface):
         # - protocol can be set to a specific value as per HID v1.11 section 4.3 Protocols, p9.
         #
         # - interface_str is an optional string descriptor to associate with the HID USB interface.
+        #
+        # - use_out_ep needs to be set to True if you're using the OUT endpoint, e.g. to get
+        #   keyboard LEDs
         super().__init__(_INTERFACE_CLASS, _INTERFACE_SUBCLASS_NONE, protocol, interface_str)
         self.extra_descriptors = extra_descriptors
         self.report_descriptor = report_descriptor
         self._int_ep = None  # set during enumeration
+        self._out_ep = None
+        self.use_out_ep = use_out_ep
 
     def get_report(self):
+        return False
+
+    def set_report(self):
+        # Override this if you are expecting reports from the host
         return False
 
     def send_report(self, report_data):
@@ -80,12 +92,19 @@ class HIDInterface(USBInterface):
         # As per HID v1.11 section 7.1 Standard Requests, return the contents of
         # the standard HID descriptor before the associated endpoint descriptor.
         desc = self.get_hid_descriptor()
-        ep_addr |= EP_OUT_FLAG
-        desc += endpoint_descriptor(ep_addr, "interrupt", 8, 8)
+        self._int_ep = ep_addr | EP_IN_FLAG
+        ep_addrs = [self._int_ep]
+
+        desc += endpoint_descriptor(self._int_ep, "interrupt", 8, 8)
+
+        if self.use_out_ep:
+            self._out_ep = (ep_addr + 1) & EP_OUT_FLAG
+            desc += endpoint_descriptor(self._out_ep, "interrupt", 8, 8)
+            ep_addrs.append(self._out_ep)
+
         self.idle_rate = 0
         self.protocol = 0
-        self._int_ep = ep_addr
-        return (desc, [], [ep_addr])
+        return (desc, [], ep_addrs)
 
     def get_hid_descriptor(self):
         # Generate a full USB HID descriptor from the object's report descriptor
@@ -102,6 +121,7 @@ class HIDInterface(USBInterface):
             0x22,  # bDescriptorType, Report
             len(self.report_descriptor),  # wDescriptorLength, Report
         )
+
         # Fill in any additional descriptor type/length pairs
         #
         # TODO: unclear if this functionality is ever used, may be easier to not
@@ -115,7 +135,7 @@ class HIDInterface(USBInterface):
 
     def handle_interface_control_xfer(self, stage, request):
         # Handle standard and class-specific interface control transfers for HID devices.
-        bmRequestType, bRequest, wValue, _, _ = request
+        bmRequestType, bRequest, wValue, wIndex, wLength = request
 
         recipient, req_type, _ = split_bmRequestType(bmRequestType)
 
@@ -144,6 +164,9 @@ class HIDInterface(USBInterface):
             if bRequest == _REQ_CONTROL_SET_PROTOCOL:
                 self.protocol = wValue
                 return b""
+            if bRequest == _REQ_CONTROL_SET_REPORT:
+                return self.set_report()
+
         return False  # Unsupported
 
 

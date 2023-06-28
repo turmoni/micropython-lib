@@ -2,6 +2,7 @@
 # MIT license; Copyright (c) 2022 Angus Gratton
 from micropython import const
 import machine
+import micropython
 import ustruct
 
 from .utils import split_bmRequestType
@@ -72,6 +73,9 @@ class _USBDevice:
         self.config_str = None
         self.max_power_ma = 50
 
+        # Workaround
+        self._always_cb = set()
+
         self._strs = self._get_device_strs()
 
         usbd = self._usbd = machine.USBD()
@@ -84,12 +88,14 @@ class _USBDevice:
             xfer_cb=self._xfer_cb,
         )
 
-    def add_interface(self, itf):
+    def add_interface(self, itf, always_cb=False):
         # Add an instance of USBInterface to the USBDevice.
         #
         # The next time USB is reenumerated (by calling .reenumerate() or
         # otherwise), this interface will appear to the host.
         self._itfs.append(itf)
+        if always_cb:
+            self._always_cb.add(itf)
 
     def remove_interface(self, itf):
         # Remove an instance of USBInterface from the USBDevice.
@@ -302,10 +308,21 @@ class _USBDevice:
             return True
         return False
 
+    def _retry_xfer_cb(self, args):
+        # Workaround for when _xfer_cb is called before the callback can be set
+        (ep_addr, result, xferred_bytes) = args
+        self._xfer_cb(ep_addr, result, xferred_bytes)
+
     def _xfer_cb(self, ep_addr, result, xferred_bytes):
         # Singleton callback from TinyUSB custom class driver when a transfer completes.
         try:
             itf, cb = self._eps[ep_addr]
+            # Sometimes this part can be reached before the callback has been registered,
+            # if this interface will *always* have callbacks then reschedule this function
+            if cb is None and itf in self._always_cb:
+                micropython.schedule(self._retry_xfer_cb, (ep_addr, result, xferred_bytes))
+                return
+
             self._eps[ep_addr] = (itf, None)
         except KeyError:
             cb = None
