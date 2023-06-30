@@ -10,6 +10,7 @@ from micropython import const
 import micropython
 import ustruct
 from machine import Timer
+import gc
 
 _INTERFACE_CLASS_MSC = const(0x08)
 _INTERFACE_SUBCLASS_SCSI = const(0x06)
@@ -317,25 +318,21 @@ class MSCInterface(USBInterface):
             self.log(f"Error: {exc}")
             self.prepare_for_csw(status=exc.status)
             return micropython.schedule(self.send_csw, None)
-            return self.send_csw()
 
         if response is None:
             self.log("None response")
             self.prepare_for_csw()
             return micropython.schedule(self.send_csw, None)
-            return self.send_csw()
 
         if len(response) > self.cbw.dCBWDataTransferLength:
             self.log("Wrong size")
             self.prepare_for_csw(status=CSW.STATUS_FAILED)
             return micropython.schedule(self.send_csw, None)
-            return self.send_csw()
 
         if len(response) == 0:
             self.log("Empty response")
             self.prepare_for_csw()
             return micropython.schedule(self.send_csw, None)
-            return self.send_csw()
 
         try:
             self.data = bytearray(response)
@@ -355,28 +352,40 @@ class MSCInterface(USBInterface):
         """Actual handler for transferring non-CSW data"""
         (ep_addr, result, xferred_bytes) = args
         self.log("proc_transfer_data")
+        self.transferred_length += xferred_bytes
 
         if self.stage != type(self).MSC_STAGE_DATA:
             self.log("Wrong stage")
             return False
 
-        self.data = self.data[xferred_bytes:]
-        self.transferred_length += xferred_bytes
-        if not self.data:
-            self.log("We're done")
-            self.prepare_for_csw()
-            return micropython.schedule(self.send_csw, None)
-            return self.send_csw()
+        if len(self.data) > xferred_bytes:
+            self.data = self.data[xferred_bytes:]
+        else:
+            self.data = bytearray()
 
-        residue = self.cbw.dCBWDataTransferLength - len(self.data)
-        if residue:
-            self.csw.dCSWDataResidue = len(self.data)
-            self.data.extend("\0" * residue)
+        if not self.data and self.storage_device.long_operation:
+            self.data = self.storage_device.long_operation["operation"]()
+
+        # The above call will have cleared this if it was the last bit of data to send
+        if not self.storage_device.long_operation:
+            # We don't have more data to fetch...
+            if not self.data:
+                # We've already sent our final actual data packet
+                self.log("We're done")
+                self.prepare_for_csw()
+                return micropython.schedule(self.send_csw, None)
+
+            # This is the last data we're sending, pad it out
+            residue = self.cbw.dCBWDataTransferLength - (
+                self.transferred_length + len(self.data)
+            )
+            if residue:
+                self.log(f"Adding {residue} bytes of padding for residue")
+                self.csw.dCSWDataResidue = residue
+                self.data.extend("\0" * residue)
 
         self.log(f"Preparing to submit data transfer, {len(self.data)} bytes")
-        self.submit_xfer(
-            ep_addr, self.data[: self.cbw.dCBWDataTransferLength], self.transfer_data
-        )
+        self.submit_xfer(ep_addr, self.data, self.transfer_data)
 
     def validate_cbw(self) -> bool:
         """Perform Valid and Meaningful checks on a CBW"""
@@ -462,7 +471,8 @@ class StorageDevice:
     Properties:
     filesystem -- a bytes-like thing representing the data this device is handling. If set to None, then the
                   object will behave as if there is no medium inserted. This can be changed at runtime.
-    block_size -- what size the blocks are for SCSI commands. This should probably be left as-is, at 512.
+    block_size -- what size the blocks are for SCSI commands. This should probably be left as-is, at 512. If
+                  the device provides its own block size, that will be used instead
     """
 
     class StorageError(OSError):
@@ -483,6 +493,7 @@ class StorageDevice:
         self.block_size = 512
         self.sense = None
         self.additional_sense_code = None
+        self.long_operation = {}
 
         # A dict of SCSI commands and their handlers; the key is the opcode for the command
         self.scsi_commands = {
@@ -529,6 +540,7 @@ class StorageDevice:
         if self.scsi_commands[cmd[0]]["name"] != "REQUEST_SENSE":
             self.sense = type(self).NO_SENSE
 
+        # Windows seems to possibly send oversized CBDs by these rules in some circumstances?
         return True
 
         # 0x00 to 0x1F should have 6-byte CBDs
@@ -550,7 +562,8 @@ class StorageDevice:
             return self.scsi_commands[cmd[0]]["handler"](cmd)
         except Exception as exc:
             raise StorageDevice.StorageError(
-                f"Error handling command: {str(exc)}", CSW.STATUS_FAILED
+                f"Error handling command {self.scsi_commands[cmd[0]]['name']}: {str(exc)}",
+                CSW.STATUS_FAILED,
             )
 
     # Below here are the SCSI command handlers
@@ -587,18 +600,30 @@ class StorageDevice:
         if self.filesystem is None:
             self.sense = type(self).MEDIUM_NOT_PRESENT
             raise StorageDevice.StorageError("No filesystem", status=CSW.STATUS_FAILED)
+
+        # Do we have an AbstractBlockDev?
+        if getattr(self.filesystem, "ioctl", False):
+            max_lba = self.filesystem.ioctl(4, None) - 1
+            block_size = self.filesystem.ioctl(5, None) or 512
         else:
             max_lba = int(len(bytes(self.filesystem)) / self.block_size) - 1
+            block_size = self.block_size
 
-        return ustruct.pack(">LL", max_lba, self.block_size)
+        return ustruct.pack(">LL", max_lba, block_size)
 
     def handle_read_format_capacity(self, cmd):
         block_num = 0
         list_length = 8
         descriptor_type = 3  # 3 = no media present
+        block_size = self.block_size
         if self.filesystem is not None:
             descriptor_type = 2  # 2 = formatted media
-            block_num = int(len(bytes(self.filesystem)) / self.block_size)
+            # Do we have an AbstractBlockDev?
+            if getattr(self.filesystem, "ioctl", False):
+                block_num = self.filesystem.ioctl(4, None)
+                block_size = self.filesystem.ioctl(5, None) or 512
+            else:
+                block_num = int(len(bytes(self.filesystem)) / self.block_size)
 
         return ustruct.pack(
             ">BBBBLBBH",
@@ -609,11 +634,41 @@ class StorageDevice:
             block_num,
             descriptor_type,
             0x00,  # Reserved
-            self.block_size,
+            block_size,
         )
 
-    def handle_read10(self, cmd):
-        (read10, flags, lba, group, length, control) = ustruct.unpack(">BBLBHB", cmd)
+    def handle_read10(self, cmd=None):
+        if cmd is None:
+            if not self.long_operation:
+                raise StorageDevice.StorageError(
+                    "handle_read10 called with no cmd, but we are not in an existing command"
+                )
+
+            length = self.long_operation["remaining_length"]
+            lba = self.long_operation["current_lba"]
+        else:
+            (read10, flags, lba, group, length, control) = ustruct.unpack(
+                ">BBLBHB", cmd
+            )
+
+        # Do we have an AbstractBlockDev?
+        if getattr(self.filesystem, "readblocks", False):
+            gc.collect()
+            # Will we be able to comfortably fit this in RAM?
+            block_size = self.filesystem.ioctl(5, None) or 512
+            max_size = int((gc.mem_free() / block_size) / 10) or 1
+            if length > max_size:
+                self.long_operation["remaining_length"] = length - max_size
+                length = max_size
+                self.long_operation["current_lba"] = lba + max_size
+                self.long_operation["operation"] = self.handle_read10
+            else:
+                self.long_operation = {}
+
+            read_data = bytearray(length * block_size)
+            self.filesystem.readblocks(lba, read_data)
+            return read_data
+
         return self.filesystem[
             lba * self.block_size : lba * self.block_size + length * self.block_size
         ]
