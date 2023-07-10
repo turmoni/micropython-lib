@@ -7,7 +7,7 @@ from .utils import (
     split_bmRequestType,
     STAGE_SETUP,
     REQ_TYPE_CLASS,
-    EP_IN_FLAG
+    EP_IN_FLAG,
 )
 from micropython import const
 import micropython
