@@ -94,9 +94,7 @@ class CSW:
     STATUS_FAILED = const(1)
     STATUS_PHASE_ERROR = const(2)
 
-    def __init__(
-        self, dCSWSignature=0x53425355, dCSWTag=None, dCSWDataResidue=0, bCSWStatus=0
-    ):
+    def __init__(self, dCSWSignature=0x53425355, dCSWTag=None, dCSWDataResidue=0, bCSWStatus=0):
         self.dCSWSignature = dCSWSignature
         self.dCSWTag = dCSWTag
         self.dCSWDataResidue = dCSWDataResidue
@@ -199,9 +197,7 @@ class MSCInterface(USBInterface):
         try:
             self.prepare_cbw()
         except KeyError:
-            self.timer.init(
-                mode=Timer.ONE_SHOT, period=2000, callback=self.try_to_prepare_cbw
-            )
+            self.timer.init(mode=Timer.ONE_SHOT, period=2000, callback=self.try_to_prepare_cbw)
 
     def handle_interface_control_xfer(self, stage, request):
         """Handle the interface control transfers; reset and get max lun"""
@@ -286,9 +282,7 @@ class MSCInterface(USBInterface):
     def receive_cbw_callback(self, ep_addr, result, xferred_bytes):
         """Callback stub to schedule actual CBW processing"""
         self.log("receive_cbw_callback")
-        micropython.schedule(
-            self.proc_receive_cbw_callback, (ep_addr, result, xferred_bytes)
-        )
+        micropython.schedule(self.proc_receive_cbw_callback, (ep_addr, result, xferred_bytes))
 
     def proc_receive_cbw_callback(self, args):
         """Invoke CBW processing"""
@@ -378,9 +372,7 @@ class MSCInterface(USBInterface):
                 return micropython.schedule(self.send_csw, None)
 
             # This is the last data we're sending, pad it out
-            residue = self.cbw.dCBWDataTransferLength - (
-                self.transferred_length + len(self.data)
-            )
+            residue = self.cbw.dCBWDataTransferLength - (self.transferred_length + len(self.data))
             if residue:
                 self.log(f"Adding {residue} bytes of padding for residue")
                 self.csw.dCSWDataResidue = residue
@@ -418,9 +410,7 @@ class MSCInterface(USBInterface):
         # Check if this is a valid SCSI command
         try:
             # The storage layer doesn't know about USB, it'll return True for valid and False for invalid
-            return not self.storage_device.validate_cmd(
-                self.cbw.CBWCB[0 : self.cbw.bCBWCBLength]
-            )
+            return not self.storage_device.validate_cmd(self.cbw.CBWCB[0 : self.cbw.bCBWCBLength])
         except Exception as exc:
             self.log(str(exc))
             raise
@@ -442,13 +432,9 @@ class MSCInterface(USBInterface):
 
         # If the host sent a command that was expecting more than just a CSW, we may have to send them some nothing in the absence of being able to STALL
         if self.transferred_length == 0 and self.csw.dCSWDataResidue != 0:
-            self.log(
-                f"Sending {self.csw.dCSWDataResidue} bytes of nothing to pad it out"
-            )
+            self.log(f"Sending {self.csw.dCSWDataResidue} bytes of nothing to pad it out")
             self.transferred_length = self.csw.dCSWDataResidue
-            self.submit_xfer(
-                self.ep_in, bytearray(self.csw.dCSWDataResidue), self.padding_sent
-            )
+            self.submit_xfer(self.ep_in, bytearray(self.csw.dCSWDataResidue), self.padding_sent)
             # The flow from sending the CSW happens in the callback, not in whatever called us, so we can just return and re-call from the padding callback
             return
 
@@ -649,9 +635,7 @@ class StorageDevice:
             length = self.long_operation["remaining_length"]
             lba = self.long_operation["current_lba"]
         else:
-            (read10, flags, lba, group, length, control) = ustruct.unpack(
-                ">BBLBHB", cmd
-            )
+            (read10, flags, lba, group, length, control) = ustruct.unpack(">BBLBHB", cmd)
 
         # Do we have an AbstractBlockDev?
         if getattr(self.filesystem, "readblocks", False):
@@ -719,6 +703,4 @@ class StorageDevice:
             )
 
         self.sense = type(self).INVALID_COMMAND
-        raise StorageDevice.StorageError(
-            "EVPD not implemented", status=CSW.STATUS_FAILED
-        )
+        raise StorageDevice.StorageError("EVPD not implemented", status=CSW.STATUS_FAILED)
