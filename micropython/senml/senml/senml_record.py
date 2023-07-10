@@ -24,7 +24,7 @@ THE SOFTWARE.
 """
 
 
-import ubinascii
+import binascii
 from senml.senml_base import SenmlBase
 
 
@@ -190,7 +190,9 @@ class SenmlRecord(SenmlBase):
             if (
                 naming_map["vd"] == "vd"
             ):  # neeed to make a distinction between json (needs base64) and cbor (needs binary)
-                result[naming_map["vd"]] = base64.b64encode(self._value)
+                result[naming_map["vd"]] = binascii.b2a_base64(self._value, newline=False).decode(
+                    "utf8"
+                )
             else:
                 result[naming_map["vd"]] = self._value
         else:
@@ -229,7 +231,7 @@ class SenmlRecord(SenmlBase):
         elif naming_map["vb"] in raw:
             val = raw[naming_map["vb"]]
         elif naming_map["vd"] in raw:
-            val = ubinascii.a2b_base64(raw[naming_map["vb"]])
+            val = binascii.a2b_base64(raw[naming_map["vb"]])
         else:
             val = None
         self.value = val

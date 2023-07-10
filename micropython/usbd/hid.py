@@ -1,20 +1,18 @@
 # MicroPython USB hid module
-# MIT license; Copyright (c) 2022 Angus Gratton
+# MIT license; Copyright (c) 2023 Angus Gratton
 from .device import (
     USBInterface,
 )
 from .utils import (
     endpoint_descriptor,
     split_bmRequestType,
+    EP_IN_FLAG,
     STAGE_SETUP,
     REQ_TYPE_STANDARD,
     REQ_TYPE_CLASS,
 )
 from micropython import const
 import ustruct
-
-EP_IN_FLAG = const(1 << 7)
-EP_OUT_FLAG = const(0x7F)
 
 _DESC_HID_TYPE = const(0x21)
 _DESC_REPORT_TYPE = const(0x22)
@@ -98,7 +96,7 @@ class HIDInterface(USBInterface):
         desc += endpoint_descriptor(self._int_ep, "interrupt", 8, 8)
 
         if self.use_out_ep:
-            self._out_ep = (ep_addr + 1) & EP_OUT_FLAG
+            self._out_ep = (ep_addr + 1) & ~EP_IN_FLAG
             desc += endpoint_descriptor(self._out_ep, "interrupt", 8, 8)
             ep_addrs.append(self._out_ep)
 
@@ -121,7 +119,6 @@ class HIDInterface(USBInterface):
             0x22,  # bDescriptorType, Report
             len(self.report_descriptor),  # wDescriptorLength, Report
         )
-
         # Fill in any additional descriptor type/length pairs
         #
         # TODO: unclear if this functionality is ever used, may be easier to not
@@ -135,7 +132,7 @@ class HIDInterface(USBInterface):
 
     def handle_interface_control_xfer(self, stage, request):
         # Handle standard and class-specific interface control transfers for HID devices.
-        bmRequestType, bRequest, wValue, wIndex, wLength = request
+        bmRequestType, bRequest, wValue, _, _ = request
 
         recipient, req_type, _ = split_bmRequestType(bmRequestType)
 

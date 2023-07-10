@@ -1,5 +1,5 @@
 # MicroPython USB utility functions
-# MIT license; Copyright (c) 2022 Angus Gratton
+# MIT license; Copyright (c) 2023 Angus Gratton
 #
 # Some constants and stateless utility functions for working with USB descriptors and requests.
 from micropython import const
@@ -15,7 +15,7 @@ import ustruct
 # Otherwise, it's not the greatest sin to be copy-pasting "private" constants
 # in a couple of places. I guess. :/
 
-EP_OUT_FLAG = const(1 << 7)
+EP_IN_FLAG = const(1 << 7)
 
 # Control transfer stages
 STAGE_IDLE = const(0)

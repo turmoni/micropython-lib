@@ -1,10 +1,10 @@
 # MicroPython USB MIDI module
-# MIT license; Copyright (c) 2022 Angus Gratton, Paul Hamshere
+# MIT license; Copyright (c) 2023 Angus Gratton, Paul Hamshere
 from micropython import const
 import ustruct
 
 from .device import USBInterface
-from .utils import endpoint_descriptor, EP_OUT_FLAG
+from .utils import endpoint_descriptor, EP_IN_FLAG
 
 _INTERFACE_CLASS_AUDIO = const(0x01)
 _INTERFACE_SUBCLASS_AUDIO_CONTROL = const(0x01)
@@ -110,9 +110,7 @@ class MIDIInterface(USBInterface):
         self.submit_xfer(0x03, self.rx_data, self.receive_data_callback)
 
     def start_receive_data(self):
-        self.submit_xfer(
-            self.ep_in, self.rx_data, self.receive_data_callback
-        )  # self.receive_data_callback)
+        self.submit_xfer(self.ep_in, self.rx_data, self.receive_data_callback)
 
     def get_itf_descriptor(self, num_eps, itf_idx, str_idx):
         # Return the MIDI USB interface descriptors.
@@ -247,11 +245,11 @@ class MIDIInterface(USBInterface):
         # The following implementation is *very* memory inefficient
         # and needs optimising
 
-        self.ep_out = (ep_addr + 1) | EP_OUT_FLAG
-        self.ep_in = ep_addr + 2
+        self.ep_out = ep_addr + 1
+        self.ep_in = ep_addr + 2 | EP_IN_FLAG
 
-        # rx side, USB "out" endpoint and embedded MIDI IN Jacks
-        e_out = endpoint_descriptor(self.ep_out, "bulk", 64, 0)
+        # rx side, USB "in" endpoint and embedded MIDI IN Jacks
+        e_out = endpoint_descriptor(self.ep_in, "bulk", 64, 0)
         cs_out = ustruct.pack(
             "<BBBB" + "B" * self._num_rx,
             4 + self._num_rx,  # bLength
@@ -261,8 +259,8 @@ class MIDIInterface(USBInterface):
             *(self._emb_id(False, idx) for idx in range(self._num_rx))  # baSourcePin(1..._num_rx)
         )
 
-        # tx side, USB "in" endpoint and embedded MIDI OUT jacks
-        e_in = endpoint_descriptor(self.ep_in, "bulk", 64, 0)
+        # tx side, USB "out" endpoint and embedded MIDI OUT jacks
+        e_in = endpoint_descriptor(self.ep_out, "bulk", 64, 0)
         cs_in = ustruct.pack(
             "<BBBB" + "B" * self._num_tx,
             4 + self._num_tx,  # bLength

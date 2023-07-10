@@ -2,10 +2,9 @@
 # MIT license; Copyright (c) 2022 Angus Gratton
 from micropython import const
 import machine
-import micropython
 import ustruct
 
-from .utils import split_bmRequestType
+from .utils import split_bmRequestType, EP_IN_FLAG
 
 # USB descriptor types
 _STD_DESC_DEVICE_TYPE = const(0x1)
@@ -52,10 +51,9 @@ class _USBDevice:
     # Should be accessed via the singleton getter module function get_usbdevice(),
     # not instantiated directly..
     def __init__(self):
-        self._eps = (
-            {}
-        )  # Mapping from each endpoint to a tuple of (interface, Optional(transfer callback))
-        self._itfs = []  # Interfaces
+        self._eps = {}  # Mapping from endpoint address to interface object
+        self._ep_cbs = {}  # Mapping from endpoint address to Optional[xfer callback]
+        self._itfs = []  # List of interfaces
         self.include_static = True  # Include static devices when enumerating?
 
         # Device properties, set non-NULL to override static values
@@ -73,9 +71,6 @@ class _USBDevice:
         self.config_str = None
         self.max_power_ma = 50
 
-        # Workaround
-        self._always_cb = set()
-
         self._strs = self._get_device_strs()
 
         usbd = self._usbd = machine.USBD()
@@ -88,14 +83,12 @@ class _USBDevice:
             xfer_cb=self._xfer_cb,
         )
 
-    def add_interface(self, itf, always_cb=False):
+    def add_interface(self, itf):
         # Add an instance of USBInterface to the USBDevice.
         #
         # The next time USB is reenumerated (by calling .reenumerate() or
         # otherwise), this interface will appear to the host.
         self._itfs.append(itf)
-        if always_cb:
-            self._always_cb.add(itf)
 
     def remove_interface(self, itf):
         # Remove an instance of USBInterface from the USBDevice.
@@ -214,6 +207,7 @@ class _USBDevice:
             desc = bytearray(_STD_DESC_CONFIG_LEN)
 
         self._eps = {}  # rebuild endpoint mapping as we enumerate each interface
+        self._ep_cbs = {}
         itf_idx = static.itf_max
         ep_addr = static.ep_max
         str_idx = static.str_max + len(strs)
@@ -232,16 +226,17 @@ class _USBDevice:
 
             desc += ep_desc
             for e in ep_addrs:
-                self._eps[e] = (itf, None)  # no pending transfer
+                self._eps[e] = itf
+                self._ep_cbs[e] = None  # no pending callback
                 # TODO: check if always incrementing leaves too many gaps
-                ep_addr = max((e & ~80) + 1, e)
+                ep_addr = max((e & ~EP_IN_FLAG) + 1, ep_addr)
 
-        self._write_configuration_descriptor(desc)
+        self._update_configuration_descriptor(desc)
 
         self._strs = strs
         return desc
 
-    def _write_configuration_descriptor(self, desc):
+    def _update_configuration_descriptor(self, desc):
         # Utility function to update the Standard Configuration Descriptor
         # header supplied in the argument with values based on the current state
         # of the device.
@@ -300,33 +295,24 @@ class _USBDevice:
         #
         # Generally, drivers should call USBInterface.submit_xfer() instead. See
         # that function for documentation about the possible parameter values.
-        itf, cb = self._eps[ep_addr]
+        cb = self._ep_cbs[ep_addr]
         if cb:
             raise RuntimeError(f"Pending xfer on EP {ep_addr}")
-        if self._usbd.submit_xfer(ep_addr, data):
-            self._eps[ep_addr] = (itf, done_cb)
-            return True
-        return False
 
-    def _retry_xfer_cb(self, args):
-        # Workaround for when _xfer_cb is called before the callback can be set
-        (ep_addr, result, xferred_bytes) = args
-        self._xfer_cb(ep_addr, result, xferred_bytes)
+        # USBD callback may be called immediately, before Python execution
+        # continues
+        self._ep_cbs[ep_addr] = done_cb
+
+        if not self._usbd.submit_xfer(ep_addr, data):
+            self._ep_cbs[ep_addr] = None
+            return False
+        return True
 
     def _xfer_cb(self, ep_addr, result, xferred_bytes):
         # Singleton callback from TinyUSB custom class driver when a transfer completes.
-        try:
-            itf, cb = self._eps[ep_addr]
-            # Sometimes this part can be reached before the callback has been registered,
-            # if this interface will *always* have callbacks then reschedule this function
-            if cb is None and itf in self._always_cb:
-                micropython.schedule(self._retry_xfer_cb, (ep_addr, result, xferred_bytes))
-                return
-
-            self._eps[ep_addr] = (itf, None)
-        except KeyError:
-            cb = None
+        cb = self._ep_cbs.get(ep_addr, None)
         if cb:
+            self._ep_cbs[ep_addr] = None
             cb(ep_addr, result, xferred_bytes)
 
     def _control_xfer_cb(self, stage, request):
@@ -355,10 +341,7 @@ class _USBDevice:
                 result = itf.handle_interface_control_xfer(stage, request)
         elif recipient == _REQ_RECIPIENT_ENDPOINT:
             ep_num = wIndex & 0xFFFF
-            try:
-                itf, _ = self._eps[ep_num]
-            except KeyError:
-                pass
+            itf = self._eps.get(ep_num, None)
             if itf:
                 result = itf.handle_endpoint_control_xfer(stage, request)
 
@@ -466,7 +449,7 @@ class USBInterface:
         #
         # Parameters:
         #
-        # - ep_addr - Address for this endpoint, without any utils.EP_OUT_FLAG (0x80) bit set.
+        # - ep_addr - Address for this endpoint, without any utils.EP_IN_FLAG (0x80) bit set.
         # - str_idx - Index to use for the first string descriptor in the result, if any.
         #
         # Result:
@@ -480,7 +463,7 @@ class USBInterface:
         #   descriptor data should start from 'str_idx'.)
         #
         # - List of endpoint addresses referenced in the descriptor data (should
-        #   start from ep_addr, optionally with the utils.EP_OUT_FLAG bit set.)
+        #   start from ep_addr, optionally with the utils.EP_IN_FLAG bit set.)
         return (b"", [], [])
 
     def handle_device_control_xfer(self, stage, request):
@@ -560,4 +543,7 @@ class USBInterface:
         # completes. The callback is called with arguments (ep_addr, result,
         # xferred_bytes) where result is one of xfer_result_t enum (see top of
         # this file), and xferred_bytes is an integer.
+        #
+        # Note that done_cb may be called immediately, possibly before this
+        # function has returned to the caller.
         return get_usbdevice()._submit_xfer(ep_addr, data, done_cb)
