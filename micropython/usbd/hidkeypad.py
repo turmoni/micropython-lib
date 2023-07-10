@@ -1,4 +1,5 @@
-# Implement a keypad
+# MicroPython USB keypad module
+# MIT license; Copyright (c) 2023 Dave Wickham
 
 from .hid import HIDInterface
 from .keycodes import KEYPAD_KEYS_TO_KEYCODES

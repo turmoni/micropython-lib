@@ -1,3 +1,5 @@
+# MicroPython USB mass storage/SCSI module
+# MIT license; Copyright (c) 2023 Dave Wickham
 from .device import USBInterface
 
 from .utils import (

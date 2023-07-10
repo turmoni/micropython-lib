@@ -1,3 +1,5 @@
+# Keypad keycodes for use with USB HID
+# MIT license; Copyright (c) 2023 Dave Wickham
 _KEYPAD_KEYS = [
     "<NumLock>", "/", "*", "-", "+", "<Enter>", "1", "2", "3", "4", "5", "6",
     "7", "8", "9", "0", "."
