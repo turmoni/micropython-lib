@@ -7,6 +7,7 @@ from .utils import (
     split_bmRequestType,
     STAGE_SETUP,
     REQ_TYPE_CLASS,
+    EP_IN_FLAG
 )
 from micropython import const
 import micropython
@@ -22,9 +23,6 @@ _PROTOCOL_BBB = const(0x50)
 _MAX_PACKET_SIZE = const(64)
 _MASS_STORAGE_RESET_REQUEST = const(0xFF)
 _GET_MAX_LUN_REQUEST = const(0xFE)
-
-EP_IN_FLAG = const(1 << 7)
-EP_OUT_FLAG = const(0x7F)
 
 
 class CBW:
@@ -179,7 +177,7 @@ class MSCInterface(USBInterface):
         self.log(f"MSC: get_endpoint_descriptors, {ep_addr}, {str_idx}")
         # The OUT endpoint is from host to device, and has the top bit set to 0
         # The IN endpoint is from device to host, and has the top bit set to 1
-        self.ep_out = ep_addr & EP_OUT_FLAG
+        self.ep_out = ep_addr & ~EP_IN_FLAG
         self.ep_in = (ep_addr + 1) | EP_IN_FLAG
         e_out = endpoint_descriptor(self.ep_out, "bulk", _MAX_PACKET_SIZE)
         e_in = endpoint_descriptor(self.ep_in, "bulk", _MAX_PACKET_SIZE)
