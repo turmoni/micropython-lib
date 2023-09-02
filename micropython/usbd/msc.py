@@ -85,6 +85,10 @@ class CBW:
         ) = ustruct.unpack("<LLLBBB16s", binary)
 
 
+class BadCbw(RuntimeError):
+    pass
+
+
 class CSW:
     """Command Status Wrapper - handles status messages from the device to the host"""
 
@@ -194,7 +198,8 @@ class MSCInterface(USBInterface):
         """
         try:
             self.prepare_cbw()
-        except KeyError:
+        except (KeyError, RuntimeError):
+            # RuntimeError is raised when the device isn't open yet, so let's just retry
             self.timer.init(mode=Timer.ONE_SHOT, period=2000, callback=self.try_to_prepare_cbw)
 
     def handle_interface_control_xfer(self, stage, request):
@@ -221,13 +226,13 @@ class MSCInterface(USBInterface):
         return False
 
     def reset(self):
-        """Theoretically reset, in reality just break things a bit at the moment"""
+        """Perform a Reset Revovery"""
         self.log("reset()")
-        # This doesn't work properly at the moment, needs additional
-        # functionality in the C side
         self.stage = type(self).MSC_STAGE_CMD
         self.transferred_length = 0
         self.storage_device.reset()
+        self.set_ep_stall(self.ep_in, False)
+        self.set_ep_stall(self.ep_out, False)
         self.prepare_cbw()
         return True
 
@@ -296,7 +301,14 @@ class MSCInterface(USBInterface):
         self.csw.dCSWDataResidue = 0
         self.csw.bCSWStatus = CSW.STATUS_PASSED
 
-        status = int(self.validate_cbw())
+        try:
+            status = int(self.validate_cbw())
+        except BadCbw as exc:
+            self.log(str(exc))
+            self.set_ep_stall(self.ep_in, True)
+            self.set_ep_stall(self.ep_out, True)
+            return False
+
         if status != CSW.STATUS_PASSED:
             self.log(f"Didn't pass: {status}")
             self.prepare_for_csw(status=status)
@@ -388,22 +400,17 @@ class MSCInterface(USBInterface):
             return CSW.STATUS_PHASE_ERROR
 
         if len(self.rx_data) != 31:
-            self.log("Wrong length")
-            return CSW.STATUS_FAILED
+            raise BadCbw("Invalid: Wrong CBW length")
 
         if self.cbw.dCBWSignature != type(self).CBW_SIGNATURE:
-            self.log("Wrong sig")
-            self.log(str(self.cbw.dCBWSignature))
-            return CSW.STATUS_FAILED
+            raise BadCbw(f"Invalid: Wrong sig: {str(self.cbw.dCBWSignature)}")
 
         # Meaningful checks (6.2.2)
         if self.cbw.bCBWLUN > 15 or not 0 < self.cbw.bCBWCBLength < 17:
-            self.log("Wrong length")
-            return CSW.STATUS_FAILED
+            raise BadCbw("Not meaningful: Wrong length command or invalid LUN")
 
         if self.cbw.bCBWLUN != self.lun:
-            self.log("Wrong LUN")
-            return CSW.STATUS_FAILED
+            raise BadCbw("Not meaningful: Wrong LUN")
 
         # Check if this is a valid SCSI command
         try:
